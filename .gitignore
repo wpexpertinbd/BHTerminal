@@ -9,3 +9,5 @@ xcuserdata/
 *.hmap
 *.ipa
 *.xcuserstate
+build/dd/
+dist/
