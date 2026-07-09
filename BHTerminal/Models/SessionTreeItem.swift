@@ -14,6 +14,15 @@ enum SessionTreeItem: Identifiable, Hashable {
         }
     }
 
+    /// OutlineGroup wants an Optional collection: nil hides the disclosure
+    /// triangle entirely (used for empty folders and for host leaves).
+    var children: [SessionTreeItem]? {
+        switch self {
+        case .folder(_, let children): return children.isEmpty ? nil : children
+        case .host: return nil
+        }
+    }
+
     static func buildTree(folders: [HostFolder], hosts: [Host], parentID: UUID? = nil) -> [SessionTreeItem] {
         let childFolders = folders
             .filter { $0.parentFolderID == parentID }

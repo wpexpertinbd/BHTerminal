@@ -22,6 +22,8 @@
 		94901BA303B2FB7050E1E370 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 3C6B0625D13AAD03ABAC27D1 /* SwiftTerm */; };
 		A5FD4540506DBBDA5347BEEC /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E506A523A4AACBB3C830E8A /* MainWindowView.swift */; };
 		D43D3AC0FA06E7B5BC87950A /* BHTerminalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8D5BC5CE3351E46E132163A /* BHTerminalTests.swift */; };
+		D9AB14F77F92246E3D4EE370 /* HostEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3C94C6F97EA919E295274 /* HostEditorView.swift */; };
+		DDE2D8244CAB1CF881B9AAE9 /* SessionSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D53A696D70413EF1FF2B4685 /* SessionSidebarView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -50,6 +52,8 @@
 		7EF971029C79893A95B2807F /* SessionTreeItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionTreeItem.swift; sourceTree = "<group>"; };
 		87040FD9F8C0CC1433C30A0D /* BHTerminalTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BHTerminalTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1096E66D19ADBEC91A03B6B /* Host.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Host.swift; sourceTree = "<group>"; };
+		CFD3C94C6F97EA919E295274 /* HostEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostEditorView.swift; sourceTree = "<group>"; };
+		D53A696D70413EF1FF2B4685 /* SessionSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionSidebarView.swift; sourceTree = "<group>"; };
 		F8D5BC5CE3351E46E132163A /* BHTerminalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BHTerminalTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -139,7 +143,9 @@
 		EAA0FD08501F434A0423A24E /* UI */ = {
 			isa = PBXGroup;
 			children = (
+				CFD3C94C6F97EA919E295274 /* HostEditorView.swift */,
 				4E506A523A4AACBB3C830E8A /* MainWindowView.swift */,
+				D53A696D70413EF1FF2B4685 /* SessionSidebarView.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -239,9 +245,11 @@
 			files = (
 				269E7BE490CA9F626FD31493 /* BHTerminalApp.swift in Sources */,
 				414B64E8599D79F8AB26290D /* Host.swift in Sources */,
+				D9AB14F77F92246E3D4EE370 /* HostEditorView.swift in Sources */,
 				7087DF2B690586C2518D41F6 /* HostFolder.swift in Sources */,
 				4EA919FB1532EC9386544057 /* KeychainService.swift in Sources */,
 				A5FD4540506DBBDA5347BEEC /* MainWindowView.swift in Sources */,
+				DDE2D8244CAB1CF881B9AAE9 /* SessionSidebarView.swift in Sources */,
 				35D04ACAE9A17D63A28B3F72 /* SessionStore.swift in Sources */,
 				0F0D65A47988B63742EFB415 /* SessionTreeItem.swift in Sources */,
 				62748C079DC71168A3CE4CF5 /* Snippet.swift in Sources */,

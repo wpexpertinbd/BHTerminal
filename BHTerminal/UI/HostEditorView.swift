@@ -1,0 +1,206 @@
+import SwiftUI
+
+/// Add/edit form for a saved Host. Secrets (password / key passphrase) are
+/// read from and written to the Keychain directly — never held in the
+/// SessionStore's JSON alongside the rest of the host's fields.
+struct HostEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let store: SessionStore
+    let editingHost: Host?
+    private let initialFolderID: UUID?
+
+    /// Picker selection is kept separate from the key path so tag equality
+    /// never has to compare associated values — Host.AuthMethod is only
+    /// assembled from these two at save time.
+    private enum AuthKind: Hashable { case agent, password, privateKey }
+
+    @State private var name: String
+    @State private var hostname: String
+    @State private var port: String
+    @State private var username: String
+    @State private var authKind: AuthKind
+    @State private var keyPath: String
+    @State private var password: String = ""
+    @State private var passphrase: String = ""
+    @State private var jumpHostID: UUID?
+    @State private var folderID: UUID?
+    @State private var notes: String
+
+    init(store: SessionStore, folderID: UUID? = nil, editingHost: Host? = nil) {
+        self.store = store
+        self.initialFolderID = folderID
+        self.editingHost = editingHost
+
+        _name = State(initialValue: editingHost?.name ?? "")
+        _hostname = State(initialValue: editingHost?.hostname ?? "")
+        _port = State(initialValue: String(editingHost?.port ?? 22))
+        _username = State(initialValue: editingHost?.username ?? NSUserName())
+
+        switch editingHost?.authMethod {
+        case .password: _authKind = State(initialValue: .password)
+        case .privateKey: _authKind = State(initialValue: .privateKey)
+        case .agent, nil: _authKind = State(initialValue: .agent)
+        }
+
+        if case .privateKey(let path) = editingHost?.authMethod {
+            _keyPath = State(initialValue: path)
+        } else {
+            _keyPath = State(initialValue: "~/.ssh/id_ed25519")
+        }
+
+        _jumpHostID = State(initialValue: editingHost?.jumpHostID)
+        _folderID = State(initialValue: editingHost?.folderID ?? folderID)
+        _notes = State(initialValue: editingHost?.notes ?? "")
+    }
+
+    private var isEditing: Bool { editingHost != nil }
+
+    private var candidateJumpHosts: [Host] {
+        store.hosts.filter { $0.id != editingHost?.id }
+    }
+
+    private var folderOptions: [(id: UUID?, label: String)] {
+        var options: [(id: UUID?, label: String)] = [(nil, "No Folder")]
+        func walk(_ parentID: UUID?, depth: Int) {
+            let children = store.folders
+                .filter { $0.parentFolderID == parentID }
+                .sorted { $0.sortOrder < $1.sortOrder }
+            for folder in children {
+                options.append((folder.id, String(repeating: "  ", count: depth) + folder.name))
+                walk(folder.id, depth: depth + 1)
+            }
+        }
+        walk(nil, depth: 0)
+        return options
+    }
+
+    var body: some View {
+        Form {
+            Section("Connection") {
+                TextField("Name", text: $name, prompt: Text("My Server"))
+                TextField("Hostname", text: $hostname, prompt: Text("example.com"))
+                TextField("Port", text: $port)
+                    .frame(maxWidth: 100)
+                TextField("Username", text: $username)
+                Picker("Folder", selection: $folderID) {
+                    ForEach(folderOptions, id: \.id) { option in
+                        Text(option.label).tag(option.id)
+                    }
+                }
+            }
+
+            Section("Authentication") {
+                Picker("Method", selection: $authKind) {
+                    Text("SSH Agent").tag(AuthKind.agent)
+                    Text("Password").tag(AuthKind.password)
+                    Text("Private Key").tag(AuthKind.privateKey)
+                }
+                .pickerStyle(.segmented)
+
+                switch authKind {
+                case .password:
+                    SecureField("Password", text: $password)
+                case .privateKey:
+                    HStack {
+                        TextField("Key path", text: $keyPath)
+                        Button("Choose…") { chooseKeyFile() }
+                    }
+                    SecureField("Passphrase (optional)", text: $passphrase)
+                case .agent:
+                    Text("Uses ssh-agent / keys already loaded for your user account.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Jump Host") {
+                Picker("Via", selection: $jumpHostID) {
+                    Text("None").tag(UUID?.none)
+                    ForEach(candidateJumpHosts) { host in
+                        Text(host.name).tag(Optional(host.id))
+                    }
+                }
+            }
+
+            Section("Notes") {
+                TextEditor(text: $notes)
+                    .frame(minHeight: 60)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(minWidth: 420, minHeight: 480)
+        .onAppear(perform: loadSecrets)
+        .safeAreaInset(edge: .bottom) {
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                Button(isEditing ? "Save" : "Add") { save() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty
+                              || hostname.trimmingCharacters(in: .whitespaces).isEmpty
+                              || username.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .padding()
+            .background(.bar)
+        }
+    }
+
+    private func loadSecrets() {
+        guard let editingHost else { return }
+        if editingHost.authMethod == .password {
+            password = (try? KeychainService.read(account: editingHost.keychainAccount)) ?? ""
+        }
+        if case .privateKey = editingHost.authMethod {
+            passphrase = (try? KeychainService.read(account: editingHost.passphraseAccount)) ?? ""
+        }
+    }
+
+    private func chooseKeyFile() {
+        let panel = NSOpenPanel()
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".ssh")
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url {
+            keyPath = url.path
+        }
+    }
+
+    private func save() {
+        var host = editingHost ?? Host(name: name, hostname: hostname, username: username, folderID: initialFolderID)
+        host.name = name
+        host.hostname = hostname
+        host.port = Int(port) ?? 22
+        host.username = username
+        switch authKind {
+        case .agent: host.authMethod = .agent
+        case .password: host.authMethod = .password
+        case .privateKey: host.authMethod = .privateKey(path: keyPath)
+        }
+        host.jumpHostID = jumpHostID
+        host.folderID = folderID
+        host.notes = notes
+
+        if editingHost != nil {
+            store.updateHost(host)
+        } else {
+            host = store.addHost(host)
+        }
+
+        switch authKind {
+        case .password:
+            if !password.isEmpty {
+                try? KeychainService.save(account: host.keychainAccount, secret: password)
+            }
+        case .privateKey:
+            if !passphrase.isEmpty {
+                try? KeychainService.save(account: host.passphraseAccount, secret: passphrase)
+            }
+        case .agent:
+            break
+        }
+
+        dismiss()
+    }
+}

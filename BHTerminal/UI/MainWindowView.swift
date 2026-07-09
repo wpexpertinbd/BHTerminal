@@ -3,16 +3,20 @@ import SwiftTerm
 import Citadel
 
 /// Sessions | SFTP browser | Terminal — the MobaXterm-style three-column shell.
-/// Column contents are placeholders until the persistence, SFTP, and terminal
-/// milestones land; this view exists first to prove the project + both SPM
-/// dependencies (SwiftTerm, Citadel) actually resolve and link.
+/// The session sidebar is real (persisted hosts/folders); SFTP and terminal
+/// panes are still placeholders until those milestones land.
 struct MainWindowView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var store = SessionStore()
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SessionTreePlaceholder()
-                .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 320)
+            SessionSidebarView(store: store) { host in
+                // Wired to real terminal launch once the terminal core lands.
+                print("Connect requested: \(host.name)")
+            }
+            .navigationTitle("Sessions")
+            .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
         } content: {
             SFTPBrowserPlaceholder()
                 .navigationSplitViewColumnWidth(min: 260, ideal: 360, max: 600)
@@ -20,16 +24,6 @@ struct MainWindowView: View {
             TerminalPlaceholder()
         }
         .navigationSplitViewStyle(.balanced)
-    }
-}
-
-private struct SessionTreePlaceholder: View {
-    var body: some View {
-        List {
-            Label("Sessions", systemImage: "server.rack")
-                .foregroundStyle(.secondary)
-        }
-        .navigationTitle("Sessions")
     }
 }
 
