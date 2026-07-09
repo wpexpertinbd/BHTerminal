@@ -2,6 +2,23 @@ import SwiftUI
 import AppKit
 import SwiftTerm
 
+/// A one-shot imperative command aimed at "the active pane" of a split
+/// group — snippet dispatch and session-logging toggles both go through
+/// this, since SplitPaneView's Coordinator (and the PTYSession instances it
+/// owns) aren't otherwise reachable from TerminalContainerView. Wrapped
+/// with a unique id so the same command (e.g. re-sending the same snippet
+/// twice in a row) is still recognized as a new event by updateNSView.
+enum PaneCommand: Equatable {
+    case sendText(String)
+    case startLogging(URL)
+    case stopLogging
+}
+
+struct PaneCommandDispatch: Equatable {
+    let id = UUID()
+    let command: PaneCommand
+}
+
 /// Wraps an NSSplitView whose arranged subviews are PTYSession instances,
 /// one per TerminalTabPane. The Coordinator caches sessions by pane id so
 /// that unrelated SwiftUI re-renders (e.g. sidebar edits elsewhere in the
@@ -12,6 +29,8 @@ struct SplitPaneView: NSViewRepresentable {
     let panes: [TerminalTabPane]
     let axis: Axis
     let store: SessionStore
+    var broadcastEnabled: Bool = false
+    var commandDispatch: PaneCommandDispatch?
     var onPaneExit: (UUID) -> Void = { _ in }
     var onCwdChange: (UUID, String) -> Void = { _, _ in }
 
@@ -24,6 +43,7 @@ struct SplitPaneView: NSViewRepresentable {
         splitView.dividerStyle = .thin
         splitView.isVertical = (axis == .horizontal)
         context.coordinator.owner = self
+        context.coordinator.installKeyMonitor()
         return splitView
     }
 
@@ -51,12 +71,65 @@ struct SplitPaneView: NSViewRepresentable {
         let orderedSessions: [NSView] = panes.compactMap { context.coordinator.sessions[$0.id] }
         splitView.subviews = orderedSessions
         splitView.adjustSubviews()
+
+        if let dispatch = commandDispatch, context.coordinator.lastCommandID != dispatch.id {
+            context.coordinator.lastCommandID = dispatch.id
+            if let target = context.coordinator.targetSession() {
+                switch dispatch.command {
+                case .sendText(let text): target.sendCommand(text)
+                case .startLogging(let url): try? target.startLogging(to: url)
+                case .stopLogging: target.stopLogging()
+                }
+            }
+        }
     }
 
     final class Coordinator: NSObject, LocalProcessTerminalViewDelegate {
         var owner: SplitPaneView?
         var sessions: [UUID: PTYSession] = [:]
         var paneIDBySession: [ObjectIdentifier: UUID] = [:]
+        var lastCommandID: UUID?
+        private var keyMonitor: Any?
+
+        /// The pane that should receive a dispatched snippet/logging
+        /// command: whichever session is first responder, falling back to
+        /// the first pane when nothing in this split group has focus.
+        func targetSession() -> PTYSession? {
+            if let responder = NSApp.keyWindow?.firstResponder as? PTYSession,
+               sessions.values.contains(where: { $0 === responder }) {
+                return responder
+            }
+            return sessions.values.first
+        }
+
+        /// Broadcast input can't be built by overriding PTYSession's
+        /// keyDown (SwiftTerm declares it `public`, not `open` — not
+        /// overridable outside the module). A local NSEvent monitor gets
+        /// the same effect: when broadcast mode is on and a keyDown lands
+        /// on one of this group's sessions, replay it (`keyDown` itself
+        /// IS public, just not overridable) to every sibling pane.
+        func installKeyMonitor() {
+            guard keyMonitor == nil else { return }
+            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                self?.relayIfBroadcasting(event)
+                return event
+            }
+        }
+
+        private func relayIfBroadcasting(_ event: NSEvent) {
+            guard owner?.broadcastEnabled == true,
+                  let responder = NSApp.keyWindow?.firstResponder as? PTYSession,
+                  let origin = sessions.values.first(where: { $0 === responder }) else { return }
+            for session in sessions.values where session !== origin {
+                session.keyDown(with: event)
+            }
+        }
+
+        deinit {
+            if let keyMonitor {
+                NSEvent.removeMonitor(keyMonitor)
+            }
+        }
 
         func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
 

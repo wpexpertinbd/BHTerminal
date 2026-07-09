@@ -27,13 +27,48 @@ final class PTYSession: LocalProcessTerminalView {
     private var hasInjectedCwdHook = false
     private var cwdHookWorkItem: DispatchWorkItem?
 
+    private var logFileHandle: FileHandle?
+
     func connect(to host: Host, resolveJumpHost: @escaping (UUID) -> Host? = { _ in nil }) {
         self.host = host
         if host.authMethod == .password {
             storedPassword = try? KeychainService.read(account: host.keychainAccount)
         }
+        applyAppearance()
         let (executable, args) = SSHArgvBuilder.build(for: host, resolveJumpHost: resolveJumpHost)
         startProcess(executable: executable, args: args)
+    }
+
+    private func applyAppearance() {
+        font = AppSettings.shared.font
+        if let fg = AppSettings.shared.theme.foreground, let bg = AppSettings.shared.theme.background {
+            nativeForegroundColor = fg
+            nativeBackgroundColor = bg
+        } else {
+            configureNativeColors()
+        }
+    }
+
+    /// Types a command into the pty as if the user typed it, followed by
+    /// Enter — used for snippet dispatch and (internally) the password/cwd
+    /// hooks below.
+    func sendCommand(_ text: String) {
+        process.send(data: ArraySlice(Array((text + "\r").utf8)))
+    }
+
+    func startLogging(to url: URL) throws {
+        stopLogging()
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+        }
+        let handle = try FileHandle(forWritingTo: url)
+        handle.seekToEndOfFile()
+        logFileHandle = handle
+    }
+
+    func stopLogging() {
+        try? logFileHandle?.close()
+        logFileHandle = nil
     }
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
@@ -48,6 +83,9 @@ final class PTYSession: LocalProcessTerminalView {
                 process.send(data: ArraySlice(Array((password + "\r").utf8)))
             }
         }
+
+        logFileHandle?.write(Data(slice))
+
         super.dataReceived(slice: slice)
 
         if !hasInjectedCwdHook {
@@ -55,6 +93,10 @@ final class PTYSession: LocalProcessTerminalView {
                 self?.scheduleCwdHookInjection()
             }
         }
+    }
+
+    deinit {
+        logFileHandle?.closeFile()
     }
 
     /// Debounced on the LAST byte received — cancels and reschedules on

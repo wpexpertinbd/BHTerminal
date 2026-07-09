@@ -1,4 +1,6 @@
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 
 /// One pane inside a tab. A tab starts with exactly one; "Split Right"/
 /// "Split Down" appends siblings along a single shared axis — a flat grid
@@ -24,6 +26,11 @@ struct TerminalContainerView: View {
     @Binding var selectedTabID: UUID?
     var onCwdChange: (Host, String) -> Void = { _, _ in }
 
+    @State private var broadcastEnabled = false
+    @State private var commandDispatch: PaneCommandDispatch?
+    @State private var isLoggingActive = false
+    @State private var isManagingSnippets = false
+
     private var selectedTabIndex: Int? {
         tabs.firstIndex { $0.id == selectedTabID }
     }
@@ -40,6 +47,8 @@ struct TerminalContainerView: View {
                         panes: tabs[index].panes,
                         axis: tabs[index].axis,
                         store: store,
+                        broadcastEnabled: broadcastEnabled,
+                        commandDispatch: commandDispatch,
                         onPaneExit: { paneID in closePane(paneID, inTabAt: index) },
                         onCwdChange: { paneID, path in
                             if let host = tabs[index].panes.first(where: { $0.id == paneID })?.host {
@@ -50,6 +59,17 @@ struct TerminalContainerView: View {
                     .id(tabs[index].id)
                 }
             }
+        }
+        .sheet(isPresented: $isManagingSnippets) {
+            SnippetManagerView(store: store)
+        }
+        .onChange(of: selectedTabID) {
+            // Logging is a per-pane, per-session concern (see PTYSession) —
+            // the toolbar indicator just can't know a newly-selected tab's
+            // real state without threading it back out of SplitPaneView's
+            // Coordinator, so it resets rather than showing a stale value.
+            // The original pane keeps logging correctly regardless.
+            isLoggingActive = false
         }
     }
 
@@ -76,6 +96,42 @@ struct TerminalContainerView: View {
             }
             Spacer(minLength: 8)
             if let index = selectedTabIndex {
+                Button {
+                    broadcastEnabled.toggle()
+                } label: {
+                    Image(systemName: broadcastEnabled ? "antenna.radiowaves.left.and.right.circle.fill" : "antenna.radiowaves.left.and.right")
+                        .foregroundStyle(broadcastEnabled ? Color.accentColor : .primary)
+                }
+                .buttonStyle(.borderless)
+                .disabled(tabs[index].panes.count < 2)
+                .help("Broadcast typed input to every pane in this tab")
+
+                Menu {
+                    if store.snippets.isEmpty {
+                        Text("No snippets yet")
+                    } else {
+                        ForEach(store.snippets.sorted { $0.sortOrder < $1.sortOrder }) { snippet in
+                            Button(snippet.name) { sendSnippet(snippet.command) }
+                        }
+                        Divider()
+                    }
+                    Button("Manage Snippets…") { isManagingSnippets = true }
+                } label: {
+                    Image(systemName: "text.badge.plus")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Send a saved snippet to the active pane")
+
+                Button {
+                    toggleLogging()
+                } label: {
+                    Image(systemName: isLoggingActive ? "record.circle.fill" : "record.circle")
+                        .foregroundStyle(isLoggingActive ? .red : .primary)
+                }
+                .buttonStyle(.borderless)
+                .help(isLoggingActive ? "Stop logging this session" : "Log this session to a file")
+
                 Menu {
                     Button("Split Right", systemImage: "rectangle.split.2x1") { split(.horizontal, tabIndex: index) }
                     Button("Split Down", systemImage: "rectangle.split.1x2") { split(.vertical, tabIndex: index) }
@@ -91,6 +147,32 @@ struct TerminalContainerView: View {
         .padding(.horizontal, 6)
         .frame(height: 32)
         .background(.bar)
+    }
+
+    private func sendSnippet(_ command: String) {
+        commandDispatch = PaneCommandDispatch(command: .sendText(command))
+    }
+
+    private func toggleLogging() {
+        if isLoggingActive {
+            commandDispatch = PaneCommandDispatch(command: .stopLogging)
+            isLoggingActive = false
+            return
+        }
+
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = defaultLogFileName()
+        panel.allowedContentTypes = [.plainText]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        commandDispatch = PaneCommandDispatch(command: .startLogging(url))
+        isLoggingActive = true
+    }
+
+    private func defaultLogFileName() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd-HHmmss"
+        let host = selectedTabIndex.flatMap { tabs[$0].panes.first?.host.name } ?? "session"
+        return "\(host)-\(formatter.string(from: Date())).log"
     }
 
     private func tabChip(_ tab: TerminalTab) -> some View {
