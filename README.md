@@ -1,0 +1,102 @@
+# BHTerminal
+
+A native macOS SSH / SFTP / VNC client — a MobaXterm-style workspace with a
+session tree, a real terminal, a file browser, and remote-desktop tabs, all in
+one window.
+
+Built by [BiswasHost](https://biswashost.com).
+
+![Terminal on the left-following file browser](docs/screenshot.png)
+
+## Features
+
+- **Sessions sidebar** — organize hosts in folders, quick-connect filter,
+  double-click to connect.
+- **Real SSH terminal** — spawns your system `ssh`, so `~/.ssh/config`, the SSH
+  agent, `ProxyJump`, keyboard-interactive/2FA, and host-key prompts all just
+  work. Tabs + split panes, broadcast-input to every pane, snippets, and
+  optional session logging.
+- **SFTP file browser** — drag-and-drop upload/download, rename/delete/mkdir,
+  and a breadcrumb path that **follows your terminal's directory** as you `cd`.
+- **VNC** — connect to remote desktops in the same tabbed window (not a separate
+  app), password auth, opt-in clipboard sharing.
+- **SSH tunnels** — local / remote / dynamic (SOCKS) port forwards, managed per
+  host, that keep running in the background.
+- **Menu-bar mode** — close the window and BHTerminal keeps running in the menu
+  bar (tunnels stay up); reopen or quit from the top-bar icon.
+- **Launch at login** — optional, in Preferences.
+- **Secure by design** — passwords/passphrases live only in the macOS Keychain
+  (never in the config file), the SFTP connection verifies host keys against
+  `~/.ssh/known_hosts`, and the app ships with Hardened Runtime.
+
+## Requirements
+
+- macOS 14 (Sonoma) or later — Apple Silicon or Intel.
+
+## Install
+
+Download the latest **`BHTerminal-x.y.z.dmg`** or **`.pkg`** from the
+[Releases](../../releases) page.
+
+- **DMG:** open it, drag **BHTerminal** onto the **Applications** folder.
+- **PKG:** open it and follow the installer (installs to `/Applications`).
+
+## First launch — allowing an unsigned app
+
+BHTerminal is signed but **not notarized by Apple** (notarization requires a paid
+Apple Developer account). So the first time you open it, macOS will say it
+*"could not verify BHTerminal is free of malware."* This is expected — you just
+approve it once:
+
+**On macOS 15 (Sequoia) / 26 (Tahoe):**
+1. Double-click **BHTerminal** — macOS blocks it and shows the warning. Click
+   **Done**.
+2. Open **System Settings → Privacy & Security**, scroll down to the
+   *"BHTerminal was blocked…"* message, and click **Open Anyway**.
+3. Confirm with Touch ID / your password. BHTerminal opens and won't ask again.
+
+*(On the `.pkg`, if the installer refuses to open, right-click it in Finder →
+**Open** → **Open**.)*
+
+You can verify the signature yourself in Terminal:
+
+```sh
+codesign -dvv /Applications/BHTerminal.app     # Authority=BHTerminal Dev
+codesign --verify --deep --strict /Applications/BHTerminal.app   # (no output = valid)
+```
+
+## Saved-password prompt
+
+The first time BHTerminal reads a saved host password, macOS asks for your
+**login keychain password** (your Mac account password). Enter it and click
+**Always Allow** — you'll only see this once. (BHTerminal is signed with a
+stable certificate, so the grant persists across app updates.)
+
+## Building from source
+
+```sh
+brew install xcodegen
+xcodegen generate
+open BHTerminal.xcodeproj
+```
+
+Then build/run in Xcode, or from the command line:
+
+```sh
+xcodebuild -scheme BHTerminal -configuration Release build
+```
+
+The project signs with a local self-signed **"BHTerminal Dev"** code-signing
+certificate. To build on a fresh machine, create one in **Keychain Access →
+Certificate Assistant → Create a Certificate** (Self-Signed Root, type: Code
+Signing), or change `CODE_SIGN_IDENTITY` in `project.yml` to `-` (ad-hoc).
+
+## Credits
+
+- [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) — terminal emulator
+- [Citadel](https://github.com/orlandos-nl/Citadel) — SFTP client
+- [RoyalVNCKit](https://github.com/royalapplications/royalvnc) — VNC client
+
+## License
+
+© 2026 BiswasHost.
