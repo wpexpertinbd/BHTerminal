@@ -9,10 +9,11 @@ struct MainWindowView: View {
     @State private var tabs: [TerminalTab] = []
     @State private var selectedTabID: UUID?
     @State private var sftpConnection = SFTPConnection()
+    @State private var tunnelManager = TunnelManager()
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SessionSidebarView(store: store, onConnect: connect)
+            SessionSidebarView(store: store, tunnelManager: tunnelManager, onConnect: connect)
                 .navigationTitle("Sessions")
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
         } content: {

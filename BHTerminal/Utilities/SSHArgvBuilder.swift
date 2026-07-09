@@ -28,13 +28,14 @@ enum SSHArgvBuilder {
         return ("/usr/bin/ssh", args)
     }
 
-    private static func jumpSpec(_ host: Host) -> String {
+    /// Shared with TunnelArgvBuilder — the -J embedded-port spec format.
+    static func jumpSpec(_ host: Host) -> String {
         host.port != 22
             ? "\(host.username)@\(host.hostname):\(host.port)"
             : "\(host.username)@\(host.hostname)"
     }
 
-    private static func expandPath(_ path: String) -> String {
+    static func expandPath(_ path: String) -> String {
         (path as NSString).expandingTildeInPath
     }
 }

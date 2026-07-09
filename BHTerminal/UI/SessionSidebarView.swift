@@ -5,6 +5,7 @@ import SwiftUI
 /// terminal core exists to actually act on it.
 struct SessionSidebarView: View {
     var store: SessionStore
+    var tunnelManager: TunnelManager
     var onConnect: (Host) -> Void = { _ in }
 
     @State private var searchText = ""
@@ -17,6 +18,7 @@ struct SessionSidebarView: View {
         case editHost(Host)
         case newFolder(parentID: UUID?)
         case renameFolder(HostFolder)
+        case tunnels(Host)
 
         var id: String {
             switch self {
@@ -24,6 +26,7 @@ struct SessionSidebarView: View {
             case .editHost(let host): return "editHost-\(host.id)"
             case .newFolder(let id): return "newFolder-\(id?.uuidString ?? "root")"
             case .renameFolder(let folder): return "renameFolder-\(folder.id)"
+            case .tunnels(let host): return "tunnels-\(host.id)"
             }
         }
     }
@@ -159,6 +162,7 @@ struct SessionSidebarView: View {
             Divider()
             Button("Edit…", systemImage: "pencil") { sheetTarget = .editHost(host) }
             Button("Duplicate", systemImage: "plus.square.on.square") { duplicate(host) }
+            Button("Tunnels…", systemImage: "arrow.left.arrow.right") { sheetTarget = .tunnels(host) }
             Divider()
             Button("Delete", systemImage: "trash", role: .destructive) {
                 pendingDeletion = .host(host)
@@ -191,6 +195,8 @@ struct SessionSidebarView: View {
             TextPromptSheet(title: "New Folder", placeholder: "Folder name") { name in
                 store.addFolder(HostFolder(name: name, parentFolderID: parentID))
             }
+        case .tunnels(let host):
+            TunnelManagerView(store: store, manager: tunnelManager, host: host)
         case .renameFolder(let folder):
             TextPromptSheet(title: "Rename Folder", initialValue: folder.name, placeholder: "Folder name") { name in
                 var updated = folder
