@@ -2,9 +2,18 @@ import SwiftUI
 
 @main
 struct BHTerminalApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
+    // Owned at App scope so they outlive the window: closing to the menu bar
+    // keeps saved sessions and running tunnels intact.
+    @State private var store = SessionStore()
+    @State private var tunnelManager = TunnelManager()
+
     var body: some Scene {
-        WindowGroup {
-            MainWindowView()
+        // A single main window (id "main") — closing it drops the app to the
+        // menu bar; "Open BHTerminal" re-opens this exact window.
+        Window("BHTerminal", id: "main") {
+            MainWindowView(store: store, tunnelManager: tunnelManager)
         }
         .defaultSize(width: 1280, height: 800)
         .windowToolbarStyle(.unified)
@@ -12,5 +21,30 @@ struct BHTerminalApp: App {
         Settings {
             PreferencesView()
         }
+
+        MenuBarExtra("BHTerminal", systemImage: "terminal") {
+            MenuBarContent()
+        }
+    }
+}
+
+/// Contents of the menu-bar icon's menu. Kept as its own view so it can pull
+/// `openWindow` from the environment.
+private struct MenuBarContent: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Open BHTerminal") {
+            AppActivation.foreground()
+            openWindow(id: "main")
+        }
+        .keyboardShortcut("o")
+
+        Divider()
+
+        Button("Quit BHTerminal") {
+            NSApplication.shared.terminate(nil)
+        }
+        .keyboardShortcut("q")
     }
 }

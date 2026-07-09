@@ -4,12 +4,16 @@ import SwiftUI
 /// Double-clicking a host in the sidebar connects both the terminal and the
 /// SFTP pane together, matching MobaXterm's feel.
 struct MainWindowView: View {
+    /// store + tunnelManager are owned by the App (process lifetime), not by
+    /// this view, so closing the window to the menu bar doesn't tear down
+    /// saved sessions or kill running tunnels.
+    let store: SessionStore
+    let tunnelManager: TunnelManager
+
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    @State private var store = SessionStore()
     @State private var tabs: [WorkspaceTab] = []
     @State private var selectedTabID: UUID?
     @State private var sftpConnection = SFTPConnection()
-    @State private var tunnelManager = TunnelManager()
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -33,6 +37,7 @@ struct MainWindowView: View {
             .navigationTitle(selectedTabTitle)
         }
         .navigationSplitViewStyle(.balanced)
+        .background(WindowConfigurator())
     }
 
     private var selectedTabTitle: String {
@@ -88,6 +93,23 @@ struct MainWindowView: View {
     }
 }
 
+/// Tags the host NSWindow so AppDelegate can recognise the main window
+/// closing (→ drop to the menu bar / background) without guessing.
+private struct WindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            view.window?.identifier = NSUserInterfaceItemIdentifier(BHTerminalWindow.mainID)
+        }
+        return view
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+enum BHTerminalWindow {
+    static let mainID = "bhterminal-main"
+}
+
 #Preview {
-    MainWindowView()
+    MainWindowView(store: SessionStore(), tunnelManager: TunnelManager())
 }
