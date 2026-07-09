@@ -38,6 +38,8 @@ targets:
       path: BHTerminal/Info.plist
       properties:
         CFBundleDisplayName: BHTerminal
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSApplicationCategoryType: public.app-category.developer-tools
         NSHumanReadableCopyright: "© 2026 BiswasHost"
         LSMinimumSystemVersion: "14.0"
@@ -46,7 +48,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.biswashost.BHTerminal
         PRODUCT_NAME: BHTerminal
-        MARKETING_VERSION: "0.1.0"
+        MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5"
         SWIFT_STRICT_CONCURRENCY: minimal
