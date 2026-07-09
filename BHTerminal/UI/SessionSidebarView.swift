@@ -148,8 +148,15 @@ struct SessionSidebarView: View {
                 .fill(colorForTag(host.colorTag))
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 1) {
-                Text(host.name)
-                Text("\(host.username)@\(host.hostname):\(host.port)")
+                HStack(spacing: 4) {
+                    if host.connectionType == .vnc {
+                        Image(systemName: "display")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(host.name)
+                }
+                Text(subtitle(for: host))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -167,6 +174,15 @@ struct SessionSidebarView: View {
             Button("Delete", systemImage: "trash", role: .destructive) {
                 pendingDeletion = .host(host)
             }
+        }
+    }
+
+    private func subtitle(for host: Host) -> String {
+        switch host.connectionType {
+        case .ssh:
+            return "\(host.username)@\(host.hostname):\(host.port)"
+        case .vnc:
+            return "\(host.hostname):\(host.port)"
         }
     }
 

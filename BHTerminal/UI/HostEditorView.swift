@@ -19,6 +19,7 @@ struct HostEditorView: View {
     @State private var hostname: String
     @State private var port: String
     @State private var username: String
+    @State private var connectionType: Host.ConnectionType
     @State private var authKind: AuthKind
     @State private var keyPath: String
     @State private var password: String = ""
@@ -36,6 +37,7 @@ struct HostEditorView: View {
         _hostname = State(initialValue: editingHost?.hostname ?? "")
         _port = State(initialValue: String(editingHost?.port ?? 22))
         _username = State(initialValue: editingHost?.username ?? NSUserName())
+        _connectionType = State(initialValue: editingHost?.connectionType ?? .ssh)
 
         switch editingHost?.authMethod {
         case .password: _authKind = State(initialValue: .password)
@@ -78,6 +80,19 @@ struct HostEditorView: View {
     var body: some View {
         Form {
             Section("Connection") {
+                Picker("Type", selection: $connectionType) {
+                    Text("SSH").tag(Host.ConnectionType.ssh)
+                    Text("VNC").tag(Host.ConnectionType.vnc)
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: connectionType) { _, newValue in
+                    // Nudge toward each type's default port, but only if
+                    // it's still sitting at the OTHER type's default —
+                    // leaves a deliberately-customized port alone.
+                    if newValue == .vnc, port == "22" { port = "5900" }
+                    if newValue == .ssh, port == "5900" { port = "22" }
+                }
+
                 TextField("Name", text: $name, prompt: Text("My Server"))
                 TextField("Hostname", text: $hostname, prompt: Text("example.com"))
                 TextField("Port", text: $port)
@@ -90,36 +105,45 @@ struct HostEditorView: View {
                 }
             }
 
-            Section("Authentication") {
-                Picker("Method", selection: $authKind) {
-                    Text("SSH Agent").tag(AuthKind.agent)
-                    Text("Password").tag(AuthKind.password)
-                    Text("Private Key").tag(AuthKind.privateKey)
-                }
-                .pickerStyle(.segmented)
-
-                switch authKind {
-                case .password:
-                    SecureField("Password", text: $password)
-                case .privateKey:
-                    HStack {
-                        TextField("Key path", text: $keyPath)
-                        Button("Choose…") { chooseKeyFile() }
+            if connectionType == .ssh {
+                Section("Authentication") {
+                    Picker("Method", selection: $authKind) {
+                        Text("SSH Agent").tag(AuthKind.agent)
+                        Text("Password").tag(AuthKind.password)
+                        Text("Private Key").tag(AuthKind.privateKey)
                     }
-                    SecureField("Passphrase (optional)", text: $passphrase)
-                case .agent:
-                    Text("Uses ssh-agent / keys already loaded for your user account.")
+                    .pickerStyle(.segmented)
+
+                    switch authKind {
+                    case .password:
+                        SecureField("Password", text: $password)
+                    case .privateKey:
+                        HStack {
+                            TextField("Key path", text: $keyPath)
+                            Button("Choose…") { chooseKeyFile() }
+                        }
+                        SecureField("Passphrase (optional)", text: $passphrase)
+                    case .agent:
+                        Text("Uses ssh-agent / keys already loaded for your user account.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Section("Jump Host") {
+                    Picker("Via", selection: $jumpHostID) {
+                        Text("None").tag(UUID?.none)
+                        ForEach(candidateJumpHosts) { host in
+                            Text(host.name).tag(Optional(host.id))
+                        }
+                    }
+                }
+            } else {
+                Section("Password") {
+                    SecureField("Password", text: $password)
+                    Text("Standard VNC auth is password-only. Apple Remote Desktop / UltraVNC MS-Logon also use the username above. To tunnel VNC through SSH, add a local port forward on an SSH host (via its Tunnels menu) and point this host at 127.0.0.1 + the forwarded port.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                }
-            }
-
-            Section("Jump Host") {
-                Picker("Via", selection: $jumpHostID) {
-                    Text("None").tag(UUID?.none)
-                    ForEach(candidateJumpHosts) { host in
-                        Text(host.name).tag(Optional(host.id))
-                    }
                 }
             }
 
@@ -139,7 +163,7 @@ struct HostEditorView: View {
                     .keyboardShortcut(.defaultAction)
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty
                               || hostname.trimmingCharacters(in: .whitespaces).isEmpty
-                              || username.trimmingCharacters(in: .whitespaces).isEmpty)
+                              || (connectionType == .ssh && username.trimmingCharacters(in: .whitespaces).isEmpty))
             }
             .padding()
             .background(.bar)
@@ -148,7 +172,7 @@ struct HostEditorView: View {
 
     private func loadSecrets() {
         guard let editingHost else { return }
-        if editingHost.authMethod == .password {
+        if editingHost.connectionType == .vnc || editingHost.authMethod == .password {
             password = (try? KeychainService.read(account: editingHost.keychainAccount)) ?? ""
         }
         if case .privateKey = editingHost.authMethod {
@@ -171,14 +195,22 @@ struct HostEditorView: View {
         var host = editingHost ?? Host(name: name, hostname: hostname, username: username, folderID: initialFolderID)
         host.name = name
         host.hostname = hostname
-        host.port = Int(port) ?? 22
+        host.port = Int(port) ?? (connectionType == .vnc ? 5900 : 22)
         host.username = username
-        switch authKind {
-        case .agent: host.authMethod = .agent
-        case .password: host.authMethod = .password
-        case .privateKey: host.authMethod = .privateKey(path: keyPath)
+        host.connectionType = connectionType
+
+        switch connectionType {
+        case .ssh:
+            switch authKind {
+            case .agent: host.authMethod = .agent
+            case .password: host.authMethod = .password
+            case .privateKey: host.authMethod = .privateKey(path: keyPath)
+            }
+            host.jumpHostID = jumpHostID
+        case .vnc:
+            host.authMethod = .password
+            host.jumpHostID = nil
         }
-        host.jumpHostID = jumpHostID
         host.folderID = folderID
         host.notes = notes
 
@@ -188,17 +220,24 @@ struct HostEditorView: View {
             host = store.addHost(host)
         }
 
-        switch authKind {
-        case .password:
+        switch connectionType {
+        case .ssh:
+            switch authKind {
+            case .password:
+                if !password.isEmpty {
+                    try? KeychainService.save(account: host.keychainAccount, secret: password)
+                }
+            case .privateKey:
+                if !passphrase.isEmpty {
+                    try? KeychainService.save(account: host.passphraseAccount, secret: passphrase)
+                }
+            case .agent:
+                break
+            }
+        case .vnc:
             if !password.isEmpty {
                 try? KeychainService.save(account: host.keychainAccount, secret: password)
             }
-        case .privateKey:
-            if !passphrase.isEmpty {
-                try? KeychainService.save(account: host.passphraseAccount, secret: passphrase)
-            }
-        case .agent:
-            break
         }
 
         dismiss()

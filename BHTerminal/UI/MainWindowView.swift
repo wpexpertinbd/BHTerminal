@@ -6,7 +6,7 @@ import SwiftUI
 struct MainWindowView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var store = SessionStore()
-    @State private var tabs: [TerminalTab] = []
+    @State private var tabs: [WorkspaceTab] = []
     @State private var selectedTabID: UUID?
     @State private var sftpConnection = SFTPConnection()
     @State private var tunnelManager = TunnelManager()
@@ -41,16 +41,50 @@ struct MainWindowView: View {
 
     /// Reuses an existing tab for this host if one's already open (matches
     /// MobaXterm's double-click-to-focus behavior); otherwise opens a new
-    /// tab and (re)connects the SFTP pane to the same host.
+    /// one. VNC hosts get a single-view tab with no SFTP pairing — SFTP is
+    /// an SSH-only concept.
     private func connect(to host: Host) {
-        if let existing = tabs.first(where: { $0.panes.contains { $0.host.id == host.id } }) {
-            selectedTabID = existing.id
+        switch host.connectionType {
+        case .ssh:
+            connectSSH(host)
+        case .vnc:
+            connectVNC(host)
+        }
+    }
+
+    private func connectSSH(_ host: Host) {
+        let existingTerminalTab = tabs.first { tab in
+            if case .terminal(let terminalTab) = tab {
+                return terminalTab.panes.contains { $0.host.id == host.id }
+            }
+            return false
+        }
+
+        if let existingTerminalTab {
+            selectedTabID = existingTerminalTab.id
         } else {
             let tab = TerminalTab(title: host.name, panes: [TerminalTabPane(host: host)])
-            tabs.append(tab)
+            tabs.append(.terminal(tab))
             selectedTabID = tab.id
         }
         Task { await sftpConnection.connect(to: host) }
+    }
+
+    private func connectVNC(_ host: Host) {
+        let existingVNCTab = tabs.first { tab in
+            if case .vnc(let vncTab) = tab {
+                return vncTab.host.id == host.id
+            }
+            return false
+        }
+
+        if let existingVNCTab {
+            selectedTabID = existingVNCTab.id
+        } else {
+            let tab = VNCTab(host: host, title: host.name)
+            tabs.append(.vnc(tab))
+            selectedTabID = tab.id
+        }
     }
 }
 

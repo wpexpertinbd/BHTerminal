@@ -2,11 +2,12 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-/// One pane inside a tab. A tab starts with exactly one; "Split Right"/
-/// "Split Down" appends siblings along a single shared axis — a flat grid
-/// rather than arbitrarily nested mixed-axis splits, which covers the
-/// common MobaXterm case (successive splits) without the complexity of a
-/// general recursive-tree reconciler fighting SwiftUI's view diffing.
+/// One pane inside a terminal tab. A tab starts with exactly one; "Split
+/// Right"/"Split Down" appends siblings along a single shared axis — a
+/// flat grid rather than arbitrarily nested mixed-axis splits, which
+/// covers the common MobaXterm case (successive splits) without the
+/// complexity of a general recursive-tree reconciler fighting SwiftUI's
+/// view diffing.
 struct TerminalTabPane: Identifiable, Hashable {
     let id = UUID()
     var host: Host
@@ -19,10 +20,41 @@ struct TerminalTab: Identifiable {
     var axis: Axis = .horizontal
 }
 
-/// Tab bar + the active tab's split-pane terminal grid.
+/// A VNC tab is a single view, no splits/broadcast/snippets/logging — same
+/// simpler treatment MobaXterm itself gives non-terminal session types.
+struct VNCTab: Identifiable {
+    let id = UUID()
+    var host: Host
+    var title: String
+}
+
+/// One shared tab bar hosts both kinds; terminal-only toolbar controls
+/// (broadcast/snippets/logging/split) only render when the selected tab
+/// is a terminal tab.
+enum WorkspaceTab: Identifiable {
+    case terminal(TerminalTab)
+    case vnc(VNCTab)
+
+    var id: UUID {
+        switch self {
+        case .terminal(let tab): return tab.id
+        case .vnc(let tab): return tab.id
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .terminal(let tab): return tab.title
+        case .vnc(let tab): return tab.title
+        }
+    }
+}
+
+/// Tab bar + the active tab's content (terminal split-pane grid, or a
+/// single VNC view).
 struct TerminalContainerView: View {
     let store: SessionStore
-    @Binding var tabs: [TerminalTab]
+    @Binding var tabs: [WorkspaceTab]
     @Binding var selectedTabID: UUID?
     var onCwdChange: (Host, String) -> Void = { _, _ in }
 
@@ -43,20 +75,8 @@ struct TerminalContainerView: View {
                 tabBar
                 Divider()
                 if let index = selectedTabIndex {
-                    SplitPaneView(
-                        panes: tabs[index].panes,
-                        axis: tabs[index].axis,
-                        store: store,
-                        broadcastEnabled: broadcastEnabled,
-                        commandDispatch: commandDispatch,
-                        onPaneExit: { paneID in closePane(paneID, inTabAt: index) },
-                        onCwdChange: { paneID, path in
-                            if let host = tabs[index].panes.first(where: { $0.id == paneID })?.host {
-                                onCwdChange(host, path)
-                            }
-                        }
-                    )
-                    .id(tabs[index].id)
+                    content(for: tabs[index], index: index)
+                        .id(tabs[index].id)
                 }
             }
         }
@@ -70,6 +90,28 @@ struct TerminalContainerView: View {
             // Coordinator, so it resets rather than showing a stale value.
             // The original pane keeps logging correctly regardless.
             isLoggingActive = false
+        }
+    }
+
+    @ViewBuilder
+    private func content(for tab: WorkspaceTab, index: Int) -> some View {
+        switch tab {
+        case .terminal(let terminalTab):
+            SplitPaneView(
+                panes: terminalTab.panes,
+                axis: terminalTab.axis,
+                store: store,
+                broadcastEnabled: broadcastEnabled,
+                commandDispatch: commandDispatch,
+                onPaneExit: { paneID in closePane(paneID, inTabAt: index) },
+                onCwdChange: { paneID, path in
+                    if let host = terminalTab.panes.first(where: { $0.id == paneID })?.host {
+                        onCwdChange(host, path)
+                    }
+                }
+            )
+        case .vnc(let vncTab):
+            VNCTabView(host: vncTab.host)
         }
     }
 
@@ -95,7 +137,7 @@ struct TerminalContainerView: View {
                 }
             }
             Spacer(minLength: 8)
-            if let index = selectedTabIndex {
+            if let index = selectedTabIndex, case .terminal(let terminalTab) = tabs[index] {
                 Button {
                     broadcastEnabled.toggle()
                 } label: {
@@ -103,7 +145,7 @@ struct TerminalContainerView: View {
                         .foregroundStyle(broadcastEnabled ? Color.accentColor : .primary)
                 }
                 .buttonStyle(.borderless)
-                .disabled(tabs[index].panes.count < 2)
+                .disabled(terminalTab.panes.count < 2)
                 .help("Broadcast typed input to every pane in this tab")
 
                 Menu {
@@ -124,7 +166,7 @@ struct TerminalContainerView: View {
                 .help("Send a saved snippet to the active pane")
 
                 Button {
-                    toggleLogging()
+                    toggleLogging(terminalTab)
                 } label: {
                     Image(systemName: isLoggingActive ? "record.circle.fill" : "record.circle")
                         .foregroundStyle(isLoggingActive ? .red : .primary)
@@ -140,7 +182,7 @@ struct TerminalContainerView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
-                .disabled(tabs[index].panes.count >= 4)
+                .disabled(terminalTab.panes.count >= 4)
                 .help("Split this tab")
             }
         }
@@ -153,7 +195,7 @@ struct TerminalContainerView: View {
         commandDispatch = PaneCommandDispatch(command: .sendText(command))
     }
 
-    private func toggleLogging() {
+    private func toggleLogging(_ terminalTab: TerminalTab) {
         if isLoggingActive {
             commandDispatch = PaneCommandDispatch(command: .stopLogging)
             isLoggingActive = false
@@ -161,22 +203,26 @@ struct TerminalContainerView: View {
         }
 
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = defaultLogFileName()
+        panel.nameFieldStringValue = defaultLogFileName(for: terminalTab)
         panel.allowedContentTypes = [.plainText]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         commandDispatch = PaneCommandDispatch(command: .startLogging(url))
         isLoggingActive = true
     }
 
-    private func defaultLogFileName() -> String {
+    private func defaultLogFileName(for terminalTab: TerminalTab) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd-HHmmss"
-        let host = selectedTabIndex.flatMap { tabs[$0].panes.first?.host.name } ?? "session"
+        let host = terminalTab.panes.first?.host.name ?? "session"
         return "\(host)-\(formatter.string(from: Date())).log"
     }
 
-    private func tabChip(_ tab: TerminalTab) -> some View {
+    private func tabChip(_ tab: WorkspaceTab) -> some View {
         HStack(spacing: 6) {
+            if case .vnc = tab {
+                Image(systemName: "display")
+                    .font(.system(size: 10))
+            }
             Text(tab.title)
                 .lineLimit(1)
                 .font(.system(size: 12))
@@ -197,16 +243,19 @@ struct TerminalContainerView: View {
     }
 
     private func split(_ axis: Axis, tabIndex: Int) {
-        guard let host = tabs[tabIndex].panes.first?.host else { return }
-        tabs[tabIndex].axis = axis
-        tabs[tabIndex].panes.append(TerminalTabPane(host: host))
+        guard case .terminal(var terminalTab) = tabs[tabIndex], let host = terminalTab.panes.first?.host else { return }
+        terminalTab.axis = axis
+        terminalTab.panes.append(TerminalTabPane(host: host))
+        tabs[tabIndex] = .terminal(terminalTab)
     }
 
     private func closePane(_ paneID: UUID, inTabAt index: Int) {
-        guard tabs.indices.contains(index) else { return }
-        tabs[index].panes.removeAll { $0.id == paneID }
-        if tabs[index].panes.isEmpty {
-            closeTab(tabs[index].id)
+        guard tabs.indices.contains(index), case .terminal(var terminalTab) = tabs[index] else { return }
+        terminalTab.panes.removeAll { $0.id == paneID }
+        if terminalTab.panes.isEmpty {
+            closeTab(terminalTab.id)
+        } else {
+            tabs[index] = .terminal(terminalTab)
         }
     }
 
