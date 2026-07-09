@@ -19,6 +19,36 @@ struct PaneCommandDispatch: Equatable {
     let command: PaneCommand
 }
 
+/// SwiftTerm's TerminalView has no built-in content padding — text renders
+/// flush against the view's edges, which reads as cramped. Wraps a
+/// PTYSession in a plain NSView with the session inset by a fixed margin
+/// via Auto Layout (the container itself stays frame-based/autoresizing so
+/// NSSplitView's own layout is untouched; only the session inside opts
+/// into constraints). Background matches the session's own resolved theme
+/// color so the margin doesn't read as a mismatched border.
+private final class PaddedTerminalContainer: NSView {
+    static let padding: CGFloat = 8
+
+    init(session: PTYSession) {
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.backgroundColor = session.nativeBackgroundColor.cgColor
+
+        session.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(session)
+        NSLayoutConstraint.activate([
+            session.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.padding),
+            session.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.padding),
+            session.topAnchor.constraint(equalTo: topAnchor, constant: Self.padding),
+            session.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.padding)
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+}
+
 /// Wraps an NSSplitView whose arranged subviews are PTYSession instances,
 /// one per TerminalTabPane. The Coordinator caches sessions by pane id so
 /// that unrelated SwiftUI re-renders (e.g. sidebar edits elsewhere in the
@@ -56,6 +86,7 @@ struct SplitPaneView: NSViewRepresentable {
             session.terminate()
             context.coordinator.sessions.removeValue(forKey: paneID)
             context.coordinator.paneIDBySession.removeValue(forKey: ObjectIdentifier(session))
+            context.coordinator.containers.removeValue(forKey: paneID)
         }
 
         for pane in panes where context.coordinator.sessions[pane.id] == nil {
@@ -66,10 +97,11 @@ struct SplitPaneView: NSViewRepresentable {
             }
             context.coordinator.sessions[pane.id] = session
             context.coordinator.paneIDBySession[ObjectIdentifier(session)] = pane.id
+            context.coordinator.containers[pane.id] = PaddedTerminalContainer(session: session)
         }
 
-        let orderedSessions: [NSView] = panes.compactMap { context.coordinator.sessions[$0.id] }
-        splitView.subviews = orderedSessions
+        let orderedContainers: [NSView] = panes.compactMap { context.coordinator.containers[$0.id] }
+        splitView.subviews = orderedContainers
         splitView.adjustSubviews()
 
         if let dispatch = commandDispatch, context.coordinator.lastCommandID != dispatch.id {
@@ -87,6 +119,7 @@ struct SplitPaneView: NSViewRepresentable {
     final class Coordinator: NSObject, LocalProcessTerminalViewDelegate {
         var owner: SplitPaneView?
         var sessions: [UUID: PTYSession] = [:]
+        var containers: [UUID: NSView] = [:]
         var paneIDBySession: [ObjectIdentifier: UUID] = [:]
         var lastCommandID: UUID?
         private var keyMonitor: Any?
