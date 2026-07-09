@@ -11,6 +11,7 @@
 		0F0D65A47988B63742EFB415 /* SessionTreeItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EF971029C79893A95B2807F /* SessionTreeItem.swift */; };
 		108102A94F4AE827DA03B658 /* TunnelRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C581EB68F1621BFF51FF31C /* TunnelRule.swift */; };
 		18984FE8DD8CE4554AFD5DF2 /* OSC7Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8A11A1E283D814F338C088D /* OSC7Tests.swift */; };
+		228B4296C045A4387F4A0361 /* RoyalVNCKit in Frameworks */ = {isa = PBXBuildFile; productRef = FFE85CF989F97FFCCC43C2D8 /* RoyalVNCKit */; };
 		269E7BE490CA9F626FD31493 /* BHTerminalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C82D151204B7B999D3C92A5 /* BHTerminalApp.swift */; };
 		2D78DA46759E0F470C29A578 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AD69599D8DDCD5F13DDA483 /* AppTheme.swift */; };
 		339991C514E317889F3D6FF0 /* SFTPEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F42C99D948D0CFFA1DCFA0 /* SFTPEntry.swift */; };
@@ -22,6 +23,7 @@
 		53C43679EBBDC97290CF0357 /* KeychainServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13C1D4D21139E190A2A464EF /* KeychainServiceTests.swift */; };
 		5C84127256863DEB971AE001 /* TunnelArgvBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51C477A3D1A8F5722BCA612C /* TunnelArgvBuilder.swift */; };
 		5F18B60ADE6B325BBAF1E303 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D88711143EEEF7E67663D1F /* AppSettings.swift */; };
+		5FC10AC6821070107990AE57 /* HostBackwardCompatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEFFB5EF6C39829603712850 /* HostBackwardCompatTests.swift */; };
 		62748C079DC71168A3CE4CF5 /* Snippet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06F4A2A3C34CCDBB6B5279A9 /* Snippet.swift */; };
 		6CC29E937ABC47849135E9E7 /* SessionStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5907C3669A0F8B7B6801C804 /* SessionStoreTests.swift */; };
 		6DB2D7EDAD567C7EBF2582CA /* PTYSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 245290FE53435B80EF4456E3 /* PTYSession.swift */; };
@@ -93,6 +95,7 @@
 		CFD3C94C6F97EA919E295274 /* HostEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostEditorView.swift; sourceTree = "<group>"; };
 		D53A696D70413EF1FF2B4685 /* SessionSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionSidebarView.swift; sourceTree = "<group>"; };
 		E0CE6DACEF067A630E3AA6F0 /* TunnelArgvBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelArgvBuilderTests.swift; sourceTree = "<group>"; };
+		EEFFB5EF6C39829603712850 /* HostBackwardCompatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostBackwardCompatTests.swift; sourceTree = "<group>"; };
 		F8A11A1E283D814F338C088D /* OSC7Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OSC7Tests.swift; sourceTree = "<group>"; };
 		F8D5BC5CE3351E46E132163A /* BHTerminalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BHTerminalTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -104,6 +107,7 @@
 			files = (
 				94901BA303B2FB7050E1E370 /* SwiftTerm in Frameworks */,
 				771440F5B0ED4D104F7C05E0 /* Citadel in Frameworks */,
+				228B4296C045A4387F4A0361 /* RoyalVNCKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -177,6 +181,7 @@
 			isa = PBXGroup;
 			children = (
 				F8D5BC5CE3351E46E132163A /* BHTerminalTests.swift */,
+				EEFFB5EF6C39829603712850 /* HostBackwardCompatTests.swift */,
 				13C1D4D21139E190A2A464EF /* KeychainServiceTests.swift */,
 				F8A11A1E283D814F338C088D /* OSC7Tests.swift */,
 				5907C3669A0F8B7B6801C804 /* SessionStoreTests.swift */,
@@ -245,6 +250,7 @@
 			packageProductDependencies = (
 				3C6B0625D13AAD03ABAC27D1 /* SwiftTerm */,
 				24437D2E9FE0A30B7BFE9107 /* Citadel */,
+				FFE85CF989F97FFCCC43C2D8 /* RoyalVNCKit */,
 			);
 			productName = BHTerminal;
 			productReference = 233EE32C80FF71A9A809E407 /* BHTerminal.app */;
@@ -290,6 +296,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				8F82E6DED25F0C94D455C04B /* XCRemoteSwiftPackageReference "Citadel" */,
+				8BBD981A3F767B73070764D2 /* XCRemoteSwiftPackageReference "royalvnc" */,
 				C9BF053DDD15D7CA5E2372F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -355,6 +362,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D43D3AC0FA06E7B5BC87950A /* BHTerminalTests.swift in Sources */,
+				5FC10AC6821070107990AE57 /* HostBackwardCompatTests.swift in Sources */,
 				53C43679EBBDC97290CF0357 /* KeychainServiceTests.swift in Sources */,
 				18984FE8DD8CE4554AFD5DF2 /* OSC7Tests.swift in Sources */,
 				BC88BF5947B7F8CC444989ED /* SSHArgvBuilderTests.swift in Sources */,
@@ -624,6 +632,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		8BBD981A3F767B73070764D2 /* XCRemoteSwiftPackageReference "royalvnc" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/royalapplications/royalvnc";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
 		8F82E6DED25F0C94D455C04B /* XCRemoteSwiftPackageReference "Citadel" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/orlandos-nl/Citadel";
@@ -652,6 +668,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C9BF053DDD15D7CA5E2372F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
 			productName = SwiftTerm;
+		};
+		FFE85CF989F97FFCCC43C2D8 /* RoyalVNCKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8BBD981A3F767B73070764D2 /* XCRemoteSwiftPackageReference "royalvnc" */;
+			productName = RoyalVNCKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

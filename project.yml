@@ -12,6 +12,9 @@ packages:
   Citadel:
     url: https://github.com/orlandos-nl/Citadel
     from: 0.12.1
+  RoyalVNCKit:
+    url: https://github.com/royalapplications/royalvnc
+    branch: main
 
 targets:
   BHTerminal:
@@ -23,6 +26,7 @@ targets:
     dependencies:
       - package: SwiftTerm
       - package: Citadel
+      - package: RoyalVNCKit
     info:
       path: BHTerminal/Info.plist
       properties:
