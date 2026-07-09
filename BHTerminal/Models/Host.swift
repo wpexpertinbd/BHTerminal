@@ -30,6 +30,10 @@ struct Host: Identifiable, Codable, Hashable {
     var tunnels: [TunnelRule] = []
     var sortOrder: Int = 0
     var notes: String = ""
+    /// VNC only. Off by default — bidirectional clipboard sharing lets a
+    /// malicious/MITM'd VNC server read (harvest) or write (poison) the
+    /// local clipboard, so it's opt-in per host.
+    var vncSharedClipboard: Bool = false
 
     var keychainAccount: String { Host.keychainAccount(for: id) }
     var passphraseAccount: String { Host.passphraseAccount(for: id) }
@@ -40,7 +44,8 @@ struct Host: Identifiable, Codable, Hashable {
     init(id: UUID = UUID(), name: String, hostname: String, port: Int = 22, username: String,
          authMethod: AuthMethod = .agent, connectionType: ConnectionType = .ssh,
          jumpHostID: UUID? = nil, folderID: UUID? = nil, colorTag: String? = nil,
-         tunnels: [TunnelRule] = [], sortOrder: Int = 0, notes: String = "") {
+         tunnels: [TunnelRule] = [], sortOrder: Int = 0, notes: String = "",
+         vncSharedClipboard: Bool = false) {
         self.id = id
         self.name = name
         self.hostname = hostname
@@ -54,6 +59,7 @@ struct Host: Identifiable, Codable, Hashable {
         self.tunnels = tunnels
         self.sortOrder = sortOrder
         self.notes = notes
+        self.vncSharedClipboard = vncSharedClipboard
     }
 
     /// Custom decode: `connectionType` is a field added after hosts were
@@ -77,5 +83,6 @@ struct Host: Identifiable, Codable, Hashable {
         tunnels = try container.decodeIfPresent([TunnelRule].self, forKey: .tunnels) ?? []
         sortOrder = try container.decodeIfPresent(Int.self, forKey: .sortOrder) ?? 0
         notes = try container.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        vncSharedClipboard = try container.decodeIfPresent(Bool.self, forKey: .vncSharedClipboard) ?? false
     }
 }

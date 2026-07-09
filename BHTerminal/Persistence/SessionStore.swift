@@ -51,6 +51,9 @@ final class SessionStore {
         } catch {
             try? data.write(to: fileURL, options: .atomic)
         }
+        // Hostnames/usernames aren't secrets but are still worth keeping off
+        // other local accounts — restrict to the owner (0600).
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
     }
 
     private static let encoder: JSONEncoder = {

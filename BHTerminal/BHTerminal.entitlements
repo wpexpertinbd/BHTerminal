@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      A self-signed certificate has no Apple Team ID, so Hardened Runtime's
+      library validation refuses to load our own embedded RoyalVNCKit.framework
+      ("different Team IDs"). Relaxing library validation is required to embed a
+      third-party dynamic framework without a paid Developer ID.
+
+      This does NOT reopen the vectors the security audit flagged: Hardened
+      Runtime still blocks DYLD_INSERT_LIBRARIES injection (no
+      allow-dyld-environment-variables entitlement) and debugger attach (no
+      get-task-allow in Release). The app never dlopen()s attacker-controlled
+      paths, so relaxing the same-team check has minimal residual risk.
+    -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+</dict>
+</plist>

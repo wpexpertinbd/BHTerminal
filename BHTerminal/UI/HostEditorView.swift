@@ -27,6 +27,7 @@ struct HostEditorView: View {
     @State private var jumpHostID: UUID?
     @State private var folderID: UUID?
     @State private var notes: String
+    @State private var vncSharedClipboard: Bool
 
     init(store: SessionStore, folderID: UUID? = nil, editingHost: Host? = nil) {
         self.store = store
@@ -38,6 +39,7 @@ struct HostEditorView: View {
         _port = State(initialValue: String(editingHost?.port ?? 22))
         _username = State(initialValue: editingHost?.username ?? NSUserName())
         _connectionType = State(initialValue: editingHost?.connectionType ?? .ssh)
+        _vncSharedClipboard = State(initialValue: editingHost?.vncSharedClipboard ?? false)
 
         switch editingHost?.authMethod {
         case .password: _authKind = State(initialValue: .password)
@@ -145,11 +147,25 @@ struct HostEditorView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                Section("Options") {
+                    Toggle("Share clipboard with remote", isOn: $vncSharedClipboard)
+                    Text("Off by default. When on, this VNC server can read and change your local clipboard — only enable it for servers you fully trust.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("Notes") {
                 TextEditor(text: $notes)
                     .frame(minHeight: 60)
+            }
+
+            if let validationError {
+                Section {
+                    Label(validationError, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.caption)
+                }
             }
         }
         .formStyle(.grouped)
@@ -161,13 +177,35 @@ struct HostEditorView: View {
                 Button("Cancel", role: .cancel) { dismiss() }
                 Button(isEditing ? "Save" : "Add") { save() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty
-                              || hostname.trimmingCharacters(in: .whitespaces).isEmpty
-                              || (connectionType == .ssh && username.trimmingCharacters(in: .whitespaces).isEmpty))
+                    .disabled(!canSave)
             }
             .padding()
             .background(.bar)
         }
+    }
+
+    /// Rejects hostnames/usernames that ssh could misinterpret as options —
+    /// the same allow-list SSHSafety enforces at connect time, surfaced here
+    /// so a bad value can't be saved in the first place. Returns nil when OK.
+    private var validationError: String? {
+        let trimmedHost = hostname.trimmingCharacters(in: .whitespaces)
+        if !trimmedHost.isEmpty && !SSHSafety.isValidHostname(trimmedHost) {
+            return SSHSafetyError.unsafeHostname(trimmedHost).errorDescription
+        }
+        if connectionType == .ssh {
+            let trimmedUser = username.trimmingCharacters(in: .whitespaces)
+            if !trimmedUser.isEmpty && !SSHSafety.isValidUsername(trimmedUser) {
+                return SSHSafetyError.unsafeUsername(trimmedUser).errorDescription
+            }
+        }
+        return nil
+    }
+
+    private var canSave: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
+            && !hostname.trimmingCharacters(in: .whitespaces).isEmpty
+            && (connectionType != .ssh || !username.trimmingCharacters(in: .whitespaces).isEmpty)
+            && validationError == nil
     }
 
     private func loadSecrets() {
@@ -192,12 +230,17 @@ struct HostEditorView: View {
     }
 
     private func save() {
+        // Belt-and-suspenders: the Save button is already disabled while
+        // validationError != nil, but never persist an unsafe host.
+        guard validationError == nil else { return }
+
         var host = editingHost ?? Host(name: name, hostname: hostname, username: username, folderID: initialFolderID)
         host.name = name
         host.hostname = hostname
         host.port = Int(port) ?? (connectionType == .vnc ? 5900 : 22)
         host.username = username
         host.connectionType = connectionType
+        host.vncSharedClipboard = vncSharedClipboard
 
         switch connectionType {
         case .ssh:

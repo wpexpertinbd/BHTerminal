@@ -33,28 +33,48 @@ final class KnownHostsValidator: NIOSSHClientServerAuthenticationDelegate {
     private static func isTrusted(_ key: NIOSSHPublicKey, hostname: String, port: Int) -> Bool {
         guard let contents = try? String(contentsOf: knownHostsURL, encoding: .utf8) else { return false }
 
-        let candidates: [String] = port == 22 ? [hostname] : [hostname, "[\(hostname)]:\(port)"]
+        // OpenSSH scopes a non-standard port strictly as "[host]:port"; a bare
+        // "host" entry means port 22 only. Match that exactly (don't also
+        // accept the bare-hostname entry for a non-22 connection).
+        let candidates: [String] = port == 22 ? [hostname] : ["[\(hostname)]:\(port)"]
 
+        var trusted = false
         for rawLine in contents.split(separator: "\n", omittingEmptySubsequences: true) {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             guard !line.isEmpty, !line.hasPrefix("#") else { continue }
 
-            // host(s) keytype base64key [comment...] — maxSplits 3 keeps the
-            // base64 key intact as its own field even when a comment follows.
-            let fields = line.split(separator: " ", maxSplits: 3).map(String.init)
+            var fields = line.split(separator: " ", maxSplits: 4).map(String.init)
             guard fields.count >= 3 else { continue }
+
+            // A leading @-marker (@revoked / @cert-authority) shifts every
+            // field right by one. Pull it off so host/keytype/key line up.
+            var marker: String?
+            if fields[0].hasPrefix("@") {
+                marker = fields.removeFirst()
+                guard fields.count >= 3 else { continue }
+            }
+
+            // We don't support host certificates in the SFTP validator; a
+            // @cert-authority line can't match a plain host key anyway.
+            if marker == "@cert-authority" { continue }
 
             guard let candidateKey = try? NIOSSHPublicKey(openSSHPublicKey: "\(fields[1]) \(fields[2])"),
                   candidateKey == key else { continue }
 
-            let hostField = fields[0]
-            if hostField.hasPrefix("|1|") {
-                if matchesHashedHost(hostField, candidates: candidates) { return true }
-            } else if hostField.split(separator: ",").map(String.init).contains(where: candidates.contains) {
-                return true
+            let hostMatches: Bool
+            if fields[0].hasPrefix("|1|") {
+                hostMatches = matchesHashedHost(fields[0], candidates: candidates)
+            } else {
+                hostMatches = fields[0].split(separator: ",").map(String.init).contains(where: candidates.contains)
             }
+            guard hostMatches else { continue }
+
+            // A key explicitly revoked for this host is refused outright,
+            // overriding any trust line elsewhere in the file.
+            if marker == "@revoked" { return false }
+            trusted = true
         }
-        return false
+        return trusted
     }
 
     private static func matchesHashedHost(_ hashField: String, candidates: [String]) -> Bool {

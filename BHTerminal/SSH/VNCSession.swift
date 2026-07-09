@@ -30,7 +30,9 @@ final class VNCSession: NSObject, VNCConnectionDelegate {
             // .forwardAllKeyboardShortcutsAndHotKeys needs Accessibility
             // permission granted to the app; this mode doesn't.
             inputMode: .forwardKeyboardShortcutsIfNotInUseLocally,
-            isClipboardRedirectionEnabled: true,
+            // Off unless the user opts in per host — a hostile/MITM'd VNC
+            // server can otherwise read or poison the local clipboard.
+            isClipboardRedirectionEnabled: host.vncSharedClipboard,
             colorDepth: .depth24Bit,
             frameEncodings: VNCFrameEncodingType.defaultFrameEncodings
         )

@@ -31,11 +31,23 @@ final class PTYSession: LocalProcessTerminalView {
 
     func connect(to host: Host, resolveJumpHost: @escaping (UUID) -> Host? = { _ in nil }) {
         self.host = host
+        applyAppearance()
+
+        let executable: String
+        let args: [String]
+        do {
+            (executable, args) = try SSHArgvBuilder.build(for: host, resolveJumpHost: resolveJumpHost)
+        } catch {
+            // Refuse to spawn ssh with an unsafe hostname/username — show the
+            // reason in the pane instead of silently connecting.
+            let message = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+            feed(text: "\r\n\u{001B}[31mCannot connect: \(message)\u{001B}[0m\r\n")
+            return
+        }
+
         if host.authMethod == .password {
             storedPassword = try? KeychainService.read(account: host.keychainAccount)
         }
-        applyAppearance()
-        let (executable, args) = SSHArgvBuilder.build(for: host, resolveJumpHost: resolveJumpHost)
         startProcess(executable: executable, args: args)
     }
 
@@ -59,7 +71,10 @@ final class PTYSession: LocalProcessTerminalView {
     func startLogging(to url: URL) throws {
         stopLogging()
         if !FileManager.default.fileExists(atPath: url.path) {
-            FileManager.default.createFile(atPath: url.path, contents: nil)
+            // 0600 — a session transcript can contain sensitive output, so
+            // don't leave it group/world-readable to other local accounts.
+            FileManager.default.createFile(atPath: url.path, contents: nil,
+                                           attributes: [.posixPermissions: 0o600])
         }
         let handle = try FileHandle(forWritingTo: url)
         handle.seekToEndOfFile()

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		03E81455784DA401D8E6DD9A /* SSHSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BC2C3D811911BD82CB1C7FF /* SSHSafety.swift */; };
 		047587FB145990645B638267 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6F1D15AC35D62F3531372DFF /* Assets.xcassets */; };
 		0F0D65A47988B63742EFB415 /* SessionTreeItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EF971029C79893A95B2807F /* SessionTreeItem.swift */; };
 		108102A94F4AE827DA03B658 /* TunnelRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C581EB68F1621BFF51FF31C /* TunnelRule.swift */; };
@@ -40,6 +41,7 @@
 		A5FD4540506DBBDA5347BEEC /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E506A523A4AACBB3C830E8A /* MainWindowView.swift */; };
 		B232C05A699E4DE85B719716 /* VNCSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C1753ED158FB1FF88829F3 /* VNCSession.swift */; };
 		BC88BF5947B7F8CC444989ED /* SSHArgvBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774008621F83060192E6A888 /* SSHArgvBuilderTests.swift */; };
+		C57E26F0FA5CA98201E2CC3B /* RoyalVNCKit in Embed Frameworks */ = {isa = PBXBuildFile; productRef = FFE85CF989F97FFCCC43C2D8 /* RoyalVNCKit */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		CDC78BDA223FD5B1EEAB268E /* OSC7.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E17AB2CF32813398E3BEF5E /* OSC7.swift */; };
 		D1998C567AC7F807B2D4DB9F /* SSHArgvBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A4D387F3112D6B2C5C0D1F9 /* SSHArgvBuilder.swift */; };
 		D43D3AC0FA06E7B5BC87950A /* BHTerminalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8D5BC5CE3351E46E132163A /* BHTerminalTests.swift */; };
@@ -60,6 +62,20 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		2527FF10D95DD4EBA2E96494 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				C57E26F0FA5CA98201E2CC3B /* RoyalVNCKit in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		06F4A2A3C34CCDBB6B5279A9 /* Snippet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Snippet.swift; sourceTree = "<group>"; };
 		13C1D4D21139E190A2A464EF /* KeychainServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainServiceTests.swift; sourceTree = "<group>"; };
@@ -79,12 +95,14 @@
 		51C477A3D1A8F5722BCA612C /* TunnelArgvBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelArgvBuilder.swift; sourceTree = "<group>"; };
 		5907C3669A0F8B7B6801C804 /* SessionStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStoreTests.swift; sourceTree = "<group>"; };
 		5AE561171541646A349D480F /* SFTPConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SFTPConnection.swift; sourceTree = "<group>"; };
+		5BC2C3D811911BD82CB1C7FF /* SSHSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHSafety.swift; sourceTree = "<group>"; };
 		5C82D151204B7B999D3C92A5 /* BHTerminalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BHTerminalApp.swift; sourceTree = "<group>"; };
 		65F1224F0B9822AC4F40AA0F /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
 		67F42C99D948D0CFFA1DCFA0 /* SFTPEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SFTPEntry.swift; sourceTree = "<group>"; };
 		6BDB04F1BC9A053D2C668D4B /* VNCPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VNCPaneView.swift; sourceTree = "<group>"; };
 		6F1D15AC35D62F3531372DFF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		727FF2ECFBFEF4B4AE044490 /* HostFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostFolder.swift; sourceTree = "<group>"; };
+		72A44326F9D98C0E436BAE36 /* BHTerminal.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BHTerminal.entitlements; sourceTree = "<group>"; };
 		734CD1FCEBEBD76ECF167776 /* SplitPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplitPaneView.swift; sourceTree = "<group>"; };
 		774008621F83060192E6A888 /* SSHArgvBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHArgvBuilderTests.swift; sourceTree = "<group>"; };
 		7EF971029C79893A95B2807F /* SessionTreeItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionTreeItem.swift; sourceTree = "<group>"; };
@@ -123,6 +141,7 @@
 			children = (
 				4E17AB2CF32813398E3BEF5E /* OSC7.swift */,
 				4A4D387F3112D6B2C5C0D1F9 /* SSHArgvBuilder.swift */,
+				5BC2C3D811911BD82CB1C7FF /* SSHSafety.swift */,
 				51C477A3D1A8F5722BCA612C /* TunnelArgvBuilder.swift */,
 			);
 			path = Utilities;
@@ -162,6 +181,7 @@
 			isa = PBXGroup;
 			children = (
 				6F1D15AC35D62F3531372DFF /* Assets.xcassets */,
+				72A44326F9D98C0E436BAE36 /* BHTerminal.entitlements */,
 				3EB6C0B28D2291DD61974B58 /* Info.plist */,
 				5D30948181EC7C6401068CF7 /* App */,
 				BD31D7856D0921C3E6E97B9D /* Models */,
@@ -247,6 +267,7 @@
 				6A26CE2B28EC09FCB4CA7317 /* Sources */,
 				A6589DFBA2C005E58B951749 /* Resources */,
 				0D9FD15635DCD341063E05D0 /* Frameworks */,
+				2527FF10D95DD4EBA2E96494 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -351,6 +372,7 @@
 				9B469019C6871F1377B99E80 /* SFTPConnection.swift in Sources */,
 				339991C514E317889F3D6FF0 /* SFTPEntry.swift in Sources */,
 				D1998C567AC7F807B2D4DB9F /* SSHArgvBuilder.swift in Sources */,
+				03E81455784DA401D8E6DD9A /* SSHSafety.swift in Sources */,
 				DDE2D8244CAB1CF881B9AAE9 /* SessionSidebarView.swift in Sources */,
 				35D04ACAE9A17D63A28B3F72 /* SessionStore.swift in Sources */,
 				0F0D65A47988B63742EFB415 /* SessionTreeItem.swift in Sources */,
@@ -463,11 +485,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGNING_REQUIRED = YES;
+				CODE_SIGN_ENTITLEMENTS = BHTerminal/BHTerminal.entitlements;
 				CODE_SIGN_IDENTITY = "BHTerminal Dev";
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BHTerminal/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -569,11 +593,11 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGNING_ALLOWED = YES;
 				CODE_SIGNING_REQUIRED = YES;
+				CODE_SIGN_ENTITLEMENTS = BHTerminal/BHTerminal.entitlements;
 				CODE_SIGN_IDENTITY = "BHTerminal Dev";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BHTerminal/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

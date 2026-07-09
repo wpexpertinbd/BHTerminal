@@ -26,7 +26,14 @@ targets:
     dependencies:
       - package: SwiftTerm
       - package: Citadel
+      # RoyalVNCKit's SPM product is a DYNAMIC library, so it must be copied
+      # into the app bundle (Contents/Frameworks) and signed — otherwise the
+      # distributed .app crashes at launch with "Library not loaded:
+      # @rpath/RoyalVNCKit.framework". (SwiftTerm/Citadel are static, so they
+      # link in and need no embedding.)
       - package: RoyalVNCKit
+        embed: true
+        link: true
     info:
       path: BHTerminal/Info.plist
       properties:
@@ -55,9 +62,23 @@ targets:
         CODE_SIGN_STYLE: Manual
         CODE_SIGNING_REQUIRED: YES
         CODE_SIGNING_ALLOWED: YES
-        ENABLE_HARDENED_RUNTIME: NO
+        CODE_SIGN_ENTITLEMENTS: BHTerminal/BHTerminal.entitlements
         GENERATE_INFOPLIST_FILE: NO
         MACOSX_DEPLOYMENT_TARGET: "14.0"
+      configs:
+        # Hardened Runtime is applied to the SHIPPED (Release) build only:
+        # it blocks DYLD_INSERT_LIBRARIES injection and debugger attach so
+        # another local process can't read the app's decrypted SSH/VNC
+        # secrets or ride its Keychain grant. It's deliberately OFF in Debug
+        # because library validation (implied by hardened runtime) refuses
+        # to load the separately-signed XCTest bundle, breaking the tests.
+        Release:
+          ENABLE_HARDENED_RUNTIME: YES
+          # Don't let Xcode inject the debug "get-task-allow" entitlement into
+          # the shipped build — with it present, any local process could
+          # debugger-attach and read decrypted secrets, defeating the whole
+          # point of Hardened Runtime here.
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
 
   BHTerminalTests:
     type: bundle.unit-test

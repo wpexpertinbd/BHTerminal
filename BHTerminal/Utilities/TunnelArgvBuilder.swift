@@ -4,7 +4,11 @@ import Foundation
 /// process — same reasoning as SSHArgvBuilder: reuse real ssh's own
 /// battle-tested port-forwarding rather than reimplementing it.
 enum TunnelArgvBuilder {
-    static func build(for tunnel: TunnelRule, host: Host, resolveJumpHost: (UUID) -> Host? = { _ in nil }) -> (executable: String, args: [String]) {
+    /// Throws SSHSafetyError if the host (or its jump host) has an unsafe
+    /// hostname/username — see SSHSafety.
+    static func build(for tunnel: TunnelRule, host: Host, resolveJumpHost: (UUID) -> Host? = { _ in nil }) throws -> (executable: String, args: [String]) {
+        try SSHSafety.validate(host, resolveJumpHost: resolveJumpHost)
+
         var args = ["-N"] // no remote command — this ssh process only forwards
 
         if host.port != 22 {
@@ -28,6 +32,8 @@ enum TunnelArgvBuilder {
             args += ["-D", "\(tunnel.listenHost):\(tunnel.listenPort)"]
         }
 
+        // End option parsing before the destination operand (see SSHArgvBuilder).
+        args.append("--")
         args.append("\(host.username)@\(host.hostname)")
 
         return ("/usr/bin/ssh", args)

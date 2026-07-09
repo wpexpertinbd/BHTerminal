@@ -34,7 +34,15 @@ final class TunnelManager {
         guard !runningTunnelIDs.contains(tunnel.id) else { return }
         lastError = nil
 
-        let (executable, args) = TunnelArgvBuilder.build(for: tunnel, host: host, resolveJumpHost: resolveJumpHost)
+        let executable: String
+        let args: [String]
+        do {
+            (executable, args) = try TunnelArgvBuilder.build(for: tunnel, host: host, resolveJumpHost: resolveJumpHost)
+        } catch {
+            lastError = "Cannot start tunnel: \((error as? LocalizedError)?.errorDescription ?? "\(error)")"
+            return
+        }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = args

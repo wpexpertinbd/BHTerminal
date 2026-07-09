@@ -5,7 +5,11 @@ import Foundation
 /// dependency) — password auth still gets ssh's normal interactive prompt
 /// in the pty; PTYSession auto-fills it from the Keychain once connected.
 enum SSHArgvBuilder {
-    static func build(for host: Host, resolveJumpHost: (UUID) -> Host? = { _ in nil }) -> (executable: String, args: [String]) {
+    /// Throws SSHSafetyError if the host (or its jump host) has a hostname/
+    /// username that ssh could misinterpret as an option — see SSHSafety.
+    static func build(for host: Host, resolveJumpHost: (UUID) -> Host? = { _ in nil }) throws -> (executable: String, args: [String]) {
+        try SSHSafety.validate(host, resolveJumpHost: resolveJumpHost)
+
         var args: [String] = []
 
         if host.port != 22 {
@@ -23,6 +27,10 @@ enum SSHArgvBuilder {
             args += ["-J", jumpSpec(jumpHost)]
         }
 
+        // "--" ends ssh option parsing so the destination operand can never
+        // be re-read as an option (defense in depth alongside SSHSafety's
+        // leading-dash rejection above).
+        args.append("--")
         args.append("\(host.username)@\(host.hostname)")
 
         return ("/usr/bin/ssh", args)
