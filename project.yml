@@ -45,8 +45,15 @@ targets:
         SWIFT_STRICT_CONCURRENCY: minimal
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
-        CODE_SIGN_IDENTITY: "-"
-        CODE_SIGNING_REQUIRED: NO
+        # Stable self-signed identity (not ad-hoc "-") so the app's code
+        # signature stays constant across rebuilds. macOS ties Keychain
+        # access ACLs to the signature; with ad-hoc signing every rebuild
+        # produced a new signature, so "Always Allow" never stuck and the
+        # saved-password prompt reappeared on each build. With this fixed
+        # identity, one "Always Allow" holds permanently.
+        CODE_SIGN_IDENTITY: "BHTerminal Dev"
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGNING_REQUIRED: YES
         CODE_SIGNING_ALLOWED: YES
         ENABLE_HARDENED_RUNTIME: NO
         GENERATE_INFOPLIST_FILE: NO
