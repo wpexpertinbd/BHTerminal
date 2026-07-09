@@ -1,0 +1,501 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		047587FB145990645B638267 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6F1D15AC35D62F3531372DFF /* Assets.xcassets */; };
+		269E7BE490CA9F626FD31493 /* BHTerminalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C82D151204B7B999D3C92A5 /* BHTerminalApp.swift */; };
+		771440F5B0ED4D104F7C05E0 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = 24437D2E9FE0A30B7BFE9107 /* Citadel */; };
+		94901BA303B2FB7050E1E370 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 3C6B0625D13AAD03ABAC27D1 /* SwiftTerm */; };
+		A5FD4540506DBBDA5347BEEC /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E506A523A4AACBB3C830E8A /* MainWindowView.swift */; };
+		D43D3AC0FA06E7B5BC87950A /* BHTerminalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8D5BC5CE3351E46E132163A /* BHTerminalTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8A6CE47CF7CFD7DA68B4B3B7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3E1A93F609B42D2D87EF789F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 88C3BE35027239AE0A555279;
+			remoteInfo = BHTerminal;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		233EE32C80FF71A9A809E407 /* BHTerminal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BHTerminal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3EB6C0B28D2291DD61974B58 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		4E506A523A4AACBB3C830E8A /* MainWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowView.swift; sourceTree = "<group>"; };
+		5C82D151204B7B999D3C92A5 /* BHTerminalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BHTerminalApp.swift; sourceTree = "<group>"; };
+		6F1D15AC35D62F3531372DFF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		87040FD9F8C0CC1433C30A0D /* BHTerminalTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BHTerminalTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F8D5BC5CE3351E46E132163A /* BHTerminalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BHTerminalTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		0D9FD15635DCD341063E05D0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				94901BA303B2FB7050E1E370 /* SwiftTerm in Frameworks */,
+				771440F5B0ED4D104F7C05E0 /* Citadel in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		5D30948181EC7C6401068CF7 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				5C82D151204B7B999D3C92A5 /* BHTerminalApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		68B753F009BF87C225426933 /* BHTerminal */ = {
+			isa = PBXGroup;
+			children = (
+				6F1D15AC35D62F3531372DFF /* Assets.xcassets */,
+				3EB6C0B28D2291DD61974B58 /* Info.plist */,
+				5D30948181EC7C6401068CF7 /* App */,
+				EAA0FD08501F434A0423A24E /* UI */,
+			);
+			path = BHTerminal;
+			sourceTree = "<group>";
+		};
+		80932977F86230BEF9D9D065 = {
+			isa = PBXGroup;
+			children = (
+				68B753F009BF87C225426933 /* BHTerminal */,
+				B70F0FD1D9152E4BC48829A1 /* BHTerminalTests */,
+				C5E4783034D4FC2585F015CC /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B70F0FD1D9152E4BC48829A1 /* BHTerminalTests */ = {
+			isa = PBXGroup;
+			children = (
+				F8D5BC5CE3351E46E132163A /* BHTerminalTests.swift */,
+			);
+			path = BHTerminalTests;
+			sourceTree = "<group>";
+		};
+		C5E4783034D4FC2585F015CC /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				233EE32C80FF71A9A809E407 /* BHTerminal.app */,
+				87040FD9F8C0CC1433C30A0D /* BHTerminalTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		EAA0FD08501F434A0423A24E /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				4E506A523A4AACBB3C830E8A /* MainWindowView.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		88C3BE35027239AE0A555279 /* BHTerminal */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 81FC69EE0DFE3D857F6CE68F /* Build configuration list for PBXNativeTarget "BHTerminal" */;
+			buildPhases = (
+				6A26CE2B28EC09FCB4CA7317 /* Sources */,
+				A6589DFBA2C005E58B951749 /* Resources */,
+				0D9FD15635DCD341063E05D0 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BHTerminal;
+			packageProductDependencies = (
+				3C6B0625D13AAD03ABAC27D1 /* SwiftTerm */,
+				24437D2E9FE0A30B7BFE9107 /* Citadel */,
+			);
+			productName = BHTerminal;
+			productReference = 233EE32C80FF71A9A809E407 /* BHTerminal.app */;
+			productType = "com.apple.product-type.application";
+		};
+		8D89E840DD3390D94F3B54E8 /* BHTerminalTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0C0633C72B40C4CA80B3AF7 /* Build configuration list for PBXNativeTarget "BHTerminalTests" */;
+			buildPhases = (
+				E11C6563CB5FFA63165ADB8E /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4187A595D059B59EB635C8D6 /* PBXTargetDependency */,
+			);
+			name = BHTerminalTests;
+			packageProductDependencies = (
+			);
+			productName = BHTerminalTests;
+			productReference = 87040FD9F8C0CC1433C30A0D /* BHTerminalTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		3E1A93F609B42D2D87EF789F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 943A08C61851122CBFDA40F1 /* Build configuration list for PBXProject "BHTerminal" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 80932977F86230BEF9D9D065;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				8F82E6DED25F0C94D455C04B /* XCRemoteSwiftPackageReference "Citadel" */,
+				C9BF053DDD15D7CA5E2372F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = C5E4783034D4FC2585F015CC /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				88C3BE35027239AE0A555279 /* BHTerminal */,
+				8D89E840DD3390D94F3B54E8 /* BHTerminalTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A6589DFBA2C005E58B951749 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				047587FB145990645B638267 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		6A26CE2B28EC09FCB4CA7317 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				269E7BE490CA9F626FD31493 /* BHTerminalApp.swift in Sources */,
+				A5FD4540506DBBDA5347BEEC /* MainWindowView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E11C6563CB5FFA63165ADB8E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D43D3AC0FA06E7B5BC87950A /* BHTerminalTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		4187A595D059B59EB635C8D6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 88C3BE35027239AE0A555279 /* BHTerminal */;
+			targetProxy = 8A6CE47CF7CFD7DA68B4B3B7 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		1F225E387B490445B92BE139 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		63576B0C00C171600BF2D556 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BHTerminal/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.biswashost.BHTerminal;
+				PRODUCT_NAME = BHTerminal;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5;
+			};
+			name = Release;
+		};
+		75D4619B5C17A8B26C891697 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		7B6C68878400A6B550DAC014 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.biswashost.BHTerminalTests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BHTerminal.app/Contents/MacOS/BHTerminal";
+			};
+			name = Release;
+		};
+		7EFA200E65228A8E228FF2C4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BHTerminal/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.biswashost.BHTerminal;
+				PRODUCT_NAME = BHTerminal;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5;
+			};
+			name = Debug;
+		};
+		DD69A45B241A21D1F9FD4F1B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.biswashost.BHTerminalTests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BHTerminal.app/Contents/MacOS/BHTerminal";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		81FC69EE0DFE3D857F6CE68F /* Build configuration list for PBXNativeTarget "BHTerminal" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7EFA200E65228A8E228FF2C4 /* Debug */,
+				63576B0C00C171600BF2D556 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		943A08C61851122CBFDA40F1 /* Build configuration list for PBXProject "BHTerminal" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1F225E387B490445B92BE139 /* Debug */,
+				75D4619B5C17A8B26C891697 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C0C0633C72B40C4CA80B3AF7 /* Build configuration list for PBXNativeTarget "BHTerminalTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DD69A45B241A21D1F9FD4F1B /* Debug */,
+				7B6C68878400A6B550DAC014 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		8F82E6DED25F0C94D455C04B /* XCRemoteSwiftPackageReference "Citadel" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/orlandos-nl/Citadel";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.12.1;
+			};
+		};
+		C9BF053DDD15D7CA5E2372F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.13.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		24437D2E9FE0A30B7BFE9107 /* Citadel */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8F82E6DED25F0C94D455C04B /* XCRemoteSwiftPackageReference "Citadel" */;
+			productName = Citadel;
+		};
+		3C6B0625D13AAD03ABAC27D1 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C9BF053DDD15D7CA5E2372F0 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 3E1A93F609B42D2D87EF789F /* Project object */;
+}
