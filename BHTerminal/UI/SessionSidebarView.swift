@@ -188,11 +188,11 @@ struct SessionSidebarView: View {
         case .editHost(let host):
             HostEditorView(store: store, editingHost: host)
         case .newFolder(let parentID):
-            FolderNameSheet(title: "New Folder") { name in
+            TextPromptSheet(title: "New Folder", placeholder: "Folder name") { name in
                 store.addFolder(HostFolder(name: name, parentFolderID: parentID))
             }
         case .renameFolder(let folder):
-            FolderNameSheet(title: "Rename Folder", initialName: folder.name) { name in
+            TextPromptSheet(title: "Rename Folder", initialValue: folder.name, placeholder: "Folder name") { name in
                 var updated = folder
                 updated.name = name
                 store.updateFolder(updated)
@@ -209,10 +209,10 @@ struct SessionSidebarView: View {
         let saved = store.addHost(copy)
 
         if host.authMethod == .password, let secret = try? KeychainService.read(account: host.keychainAccount) {
-            try? KeychainService.save(account: saved.keychainAccount, secret: secret ?? "")
+            try? KeychainService.save(account: saved.keychainAccount, secret: secret)
         }
         if case .privateKey = host.authMethod, let secret = try? KeychainService.read(account: host.passphraseAccount) {
-            try? KeychainService.save(account: saved.passphraseAccount, secret: secret ?? "")
+            try? KeychainService.save(account: saved.passphraseAccount, secret: secret)
         }
     }
 
@@ -223,41 +223,5 @@ struct SessionSidebarView: View {
         case nil: break
         }
         pendingDeletion = nil
-    }
-}
-
-/// Tiny reusable sheet for naming/renaming a folder.
-private struct FolderNameSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let title: String
-    var initialName: String = ""
-    let onSave: (String) -> Void
-
-    @State private var name: String = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(.headline)
-            TextField("Folder name", text: $name)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit(save)
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                Button("Save") { save() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-        .padding()
-        .frame(width: 320)
-        .onAppear { name = initialName }
-    }
-
-    private func save() {
-        let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        onSave(trimmed)
-        dismiss()
     }
 }
