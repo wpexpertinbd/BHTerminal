@@ -68,6 +68,20 @@ struct SplitPaneView: NSViewRepresentable {
         Coordinator()
     }
 
+    /// Without this, closing a tab or switching away from it (both of
+    /// which tear down this NSViewRepresentable via its `.id()` changing,
+    /// never calling updateNSView again) would leak the underlying `ssh`
+    /// processes — LocalProcess's own deinit only cancels its exit-status
+    /// monitor, it does NOT send SIGTERM (only `.terminate()` does; see
+    /// SwiftTerm's LocalProcess.swift). updateNSView's per-pane diffing
+    /// only catches closing ONE split among several while the tab stays
+    /// open; this catches the tab actually going away.
+    static func dismantleNSView(_ nsView: NSSplitView, coordinator: Coordinator) {
+        for session in coordinator.sessions.values {
+            session.terminate()
+        }
+    }
+
     func makeNSView(context: Context) -> NSSplitView {
         let splitView = NSSplitView()
         splitView.dividerStyle = .thin
