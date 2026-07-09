@@ -13,6 +13,7 @@ struct SplitPaneView: NSViewRepresentable {
     let axis: Axis
     let store: SessionStore
     var onPaneExit: (UUID) -> Void = { _ in }
+    var onCwdChange: (UUID, String) -> Void = { _, _ in }
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -61,7 +62,16 @@ struct SplitPaneView: NSViewRepresentable {
 
         func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
 
-        func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
+        func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
+            guard let session = source as? PTYSession,
+                  let paneID = paneIDBySession[ObjectIdentifier(session)],
+                  let raw = directory,
+                  let path = OSC7.parsePath(from: raw) else { return }
+            let callback = owner?.onCwdChange
+            DispatchQueue.main.async {
+                callback?(paneID, path)
+            }
+        }
 
         func processTerminated(source: TerminalView, exitCode: Int32?) {
             guard let session = source as? PTYSession,

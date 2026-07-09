@@ -106,6 +106,14 @@ final class SFTPConnection {
         await load(path: parent.isEmpty ? "/" : parent, showLoading: true)
     }
 
+    /// Driven by the terminal's OSC 7 cwd-follow — `path` is already
+    /// absolute (from PTYSession's shell hook), unlike `navigate(to:)`
+    /// which resolves relative to `currentPath`.
+    func navigateToAbsolutePath(_ path: String) async {
+        guard sftp != nil, path != currentPath else { return }
+        await load(path: path, showLoading: false)
+    }
+
     func createDirectory(name: String) async {
         guard let sftp else { return }
         do {

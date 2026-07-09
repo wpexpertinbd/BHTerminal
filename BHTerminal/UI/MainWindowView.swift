@@ -20,8 +20,16 @@ struct MainWindowView: View {
                 .navigationSplitViewColumnWidth(min: 260, ideal: 360, max: 600)
                 .navigationTitle("Files")
         } detail: {
-            TerminalContainerView(store: store, tabs: $tabs, selectedTabID: $selectedTabID)
-                .navigationTitle(selectedTabTitle)
+            TerminalContainerView(
+                store: store,
+                tabs: $tabs,
+                selectedTabID: $selectedTabID,
+                onCwdChange: { host, path in
+                    guard host.id == sftpConnection.connectedHost?.id else { return }
+                    Task { await sftpConnection.navigateToAbsolutePath(path) }
+                }
+            )
+            .navigationTitle(selectedTabTitle)
         }
         .navigationSplitViewStyle(.balanced)
     }

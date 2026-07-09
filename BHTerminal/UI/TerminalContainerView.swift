@@ -22,6 +22,7 @@ struct TerminalContainerView: View {
     let store: SessionStore
     @Binding var tabs: [TerminalTab]
     @Binding var selectedTabID: UUID?
+    var onCwdChange: (Host, String) -> Void = { _, _ in }
 
     private var selectedTabIndex: Int? {
         tabs.firstIndex { $0.id == selectedTabID }
@@ -39,7 +40,12 @@ struct TerminalContainerView: View {
                         panes: tabs[index].panes,
                         axis: tabs[index].axis,
                         store: store,
-                        onPaneExit: { paneID in closePane(paneID, inTabAt: index) }
+                        onPaneExit: { paneID in closePane(paneID, inTabAt: index) },
+                        onCwdChange: { paneID, path in
+                            if let host = tabs[index].panes.first(where: { $0.id == paneID })?.host {
+                                onCwdChange(host, path)
+                            }
+                        }
                     )
                     .id(tabs[index].id)
                 }
