@@ -113,6 +113,70 @@ final class SessionImportTests: XCTestCase {
         XCTAssertFalse(store.hosts.contains { $0.hostname.hasPrefix("-") })
     }
 
+    // MARK: - MobaXterm stored-passwords dump
+
+    private let mobaPasswords = """
+    ssh22:root@vps.example.com = secretA\r
+    root@vps.example.com = secretA\r
+    ssh2250:deploy@build.example.com = secretB\r
+    vnc:admin@10.0.0.5 = secretC\r
+    vnc5901:admin@10.0.0.6 = secretD\r
+    rdp:administrator@win.example.com = secretE\r
+    lonelyuser@only-bare.example.com = secretF\r
+    """
+
+    func testMobaPasswordsParsing() {
+        let (sessions, warnings) = MobaXtermPasswordsImporter.parse(mobaPasswords)
+
+        // root@vps (ssh22, bare deduped), deploy@build (ssh2250), admin@.5 (vnc),
+        // admin@.6 (vnc5901), lonelyuser (bare-only → ssh22). RDP skipped.
+        XCTAssertEqual(sessions.count, 5)
+
+        let root = sessions.first { $0.username == "root" }
+        XCTAssertEqual(root?.hostname, "vps.example.com")
+        XCTAssertEqual(root?.port, 22)
+        XCTAssertEqual(root?.connectionType, .ssh)
+        XCTAssertEqual(root?.password, "secretA")
+
+        let deploy = sessions.first { $0.username == "deploy" }
+        XCTAssertEqual(deploy?.port, 2250)
+        XCTAssertEqual(deploy?.password, "secretB")
+
+        let vnc = sessions.first { $0.hostname == "10.0.0.5" }
+        XCTAssertEqual(vnc?.connectionType, .vnc)
+        XCTAssertEqual(vnc?.port, 5900)
+
+        let vnc2 = sessions.first { $0.hostname == "10.0.0.6" }
+        XCTAssertEqual(vnc2?.port, 5901)
+
+        let lonely = sessions.first { $0.username == "lonelyuser" }
+        XCTAssertEqual(lonely?.connectionType, .ssh)
+        XCTAssertEqual(lonely?.port, 22)
+
+        // bare root@vps didn't create a second host
+        XCTAssertEqual(sessions.filter { $0.hostname == "vps.example.com" }.count, 1)
+        XCTAssertTrue(warnings.contains { $0.contains("SSH and VNC") })
+    }
+
+    func testPasswordsDetectionAndCommitStoresSecret() throws {
+        let (source, sessions, _) = try SessionImport.parse(contents: mobaPasswords, filename: "MobaXterm Stored Passwords.txt")
+        XCTAssertEqual(source, .mobaXtermPasswords)
+
+        let store = SessionStore(fileURL: Self.tempStoreURL())
+        let result = SessionImportCommitter.commit(source: source, sessions: sessions, warnings: [], into: store)
+        XCTAssertEqual(result.importedHosts, 5)
+
+        // A committed host uses password auth and its secret is in the Keychain.
+        guard let root = store.hosts.first(where: { $0.username == "root" }) else {
+            return XCTFail("root host missing")
+        }
+        XCTAssertEqual(root.authMethod, .password)
+        let stored = try KeychainService.read(account: root.keychainAccount)
+        XCTAssertEqual(stored, "secretA")
+        try? KeychainService.delete(account: root.keychainAccount) // cleanup
+        for host in store.hosts { try? KeychainService.delete(account: host.keychainAccount) }
+    }
+
     private static func tempStoreURL() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("bhterminal-import-test-\(UUID().uuidString).json")

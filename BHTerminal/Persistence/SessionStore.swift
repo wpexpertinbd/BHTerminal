@@ -41,7 +41,21 @@ final class SessionStore {
         snippets = document.snippets
     }
 
+    /// Set during a bulk import so the 700+ addHost/addFolder calls don't each
+    /// rewrite the whole JSON file (which would be O(n²)); save() runs once
+    /// when the batch closes.
+    private var isBatching = false
+
+    /// Runs `body` with per-mutation saves suppressed, then saves once.
+    func performBatch(_ body: () -> Void) {
+        isBatching = true
+        body()
+        isBatching = false
+        save()
+    }
+
     func save() {
+        guard !isBatching else { return }
         let document = Document(folders: folders, hosts: hosts, snippets: snippets)
         guard let data = try? SessionStore.encoder.encode(document) else { return }
         let tempURL = fileURL.appendingPathExtension("tmp")

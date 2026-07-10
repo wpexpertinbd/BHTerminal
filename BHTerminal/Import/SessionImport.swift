@@ -12,6 +12,9 @@ struct ParsedSession: Equatable {
     /// Nested folder names (outermost first); empty = directly under the
     /// import's root folder.
     var folderPath: [String]
+    /// Only set by the MobaXterm stored-passwords importer; goes straight into
+    /// the Keychain, never the JSON store. nil = use agent/key auth.
+    var password: String? = nil
 }
 
 struct ImportResult {
@@ -24,6 +27,7 @@ struct ImportResult {
 
 enum ImportSource: String {
     case mobaXterm = "MobaXterm"
+    case mobaXtermPasswords = "MobaXterm Passwords"
     case sshConfig = "SSH Config"
 }
 
@@ -58,6 +62,11 @@ enum SessionImport {
             return (.mobaXterm, sessions, warnings)
         }
 
+        if looksLikeMobaPasswords(contents) {
+            let (sessions, warnings) = MobaXtermPasswordsImporter.parse(contents)
+            return (.mobaXtermPasswords, sessions, warnings)
+        }
+
         let ext = (filename as NSString).pathExtension.lowercased()
         if ["mobaconf", "mxtsessions", "ini"].contains(ext) {
             // A MobaXterm file that has no [Bookmarks] section is the
@@ -78,6 +87,20 @@ enum SessionImport {
             line.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("host ")
         }
     }
+
+    /// MobaXterm's "stored passwords" dump: lines of `[proto:]user@host = password`.
+    private static func looksLikeMobaPasswords(_ contents: String) -> Bool {
+        var matches = 0
+        for line in contents.components(separatedBy: .newlines) {
+            let t = line.trimmingCharacters(in: .whitespaces)
+            guard let eq = t.range(of: " = ") else { continue }
+            if t[..<eq.lowerBound].contains("@") {
+                matches += 1
+                if matches >= 3 { return true }
+            }
+        }
+        return false
+    }
 }
 
 /// Commits parsed sessions into the store: creates one root folder for the
@@ -94,6 +117,15 @@ enum SessionImportCommitter {
             return result
         }
 
+        // Import can be 700+ hosts — batch so the store's JSON is written once,
+        // not once per host.
+        store.performBatch {
+            commitInBatch(source: source, sessions: sessions, into: store, result: &result)
+        }
+        return result
+    }
+
+    private static func commitInBatch(source: ImportSource, sessions: [ParsedSession], into store: SessionStore, result: inout ImportResult) {
         let root = store.addFolder(HostFolder(name: "\(source.rawValue) Import", parentFolderID: nil))
         result.importedFolders += 1
 
@@ -132,19 +164,26 @@ enum SessionImportCommitter {
                 }
             }
 
+            let hasPassword = !(session.password ?? "").isEmpty
             let host = Host(
                 name: session.name.isEmpty ? session.hostname : session.name,
                 hostname: session.hostname,
                 port: session.port,
                 username: username,
-                authMethod: .agent, // passwords are never in a plain export — re-enter into Keychain
+                // .password only when the import actually carried one (the
+                // MobaXterm stored-passwords dump); otherwise agent/key.
+                authMethod: hasPassword ? .password : .agent,
                 connectionType: session.connectionType,
                 folderID: ensureFolder(session.folderPath)
             )
-            store.addHost(host)
+            let saved = store.addHost(host)
             result.importedHosts += 1
-        }
 
-        return result
+            // The secret goes to the Keychain keyed by the new host's id —
+            // never into sessions.json.
+            if let password = session.password, !password.isEmpty {
+                try? KeychainService.save(account: saved.keychainAccount, secret: password)
+            }
+        }
     }
 }
