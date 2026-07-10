@@ -177,6 +177,26 @@ final class SessionImportTests: XCTestCase {
         for host in store.hosts { try? KeychainService.delete(account: host.keychainAccount) }
     }
 
+    func testCommitSanitizesHostileNames() {
+        let store = SessionStore(fileURL: Self.tempStoreURL())
+        let longName = String(repeating: "A", count: 5000)
+        let sessions = [
+            ParsedSession(name: "line1\nline2\u{0007}", hostname: "example.com", port: 22, username: "root", connectionType: .ssh, folderPath: [String(repeating: "F", count: 5000)]),
+            ParsedSession(name: longName, hostname: "example.org", port: 22, username: "root", connectionType: .ssh, folderPath: []),
+        ]
+        _ = SessionImportCommitter.commit(source: .mobaXterm, sessions: sessions, warnings: [], into: store)
+
+        for host in store.hosts {
+            XCTAssertLessThanOrEqual(host.name.count, 200)
+            XCTAssertFalse(host.name.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) },
+                           "host name must not contain control characters")
+        }
+        for folder in store.folders {
+            XCTAssertLessThanOrEqual(folder.name.count, 200)
+        }
+        for host in store.hosts { try? KeychainService.delete(account: host.keychainAccount) }
+    }
+
     private static func tempStoreURL() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("bhterminal-import-test-\(UUID().uuidString).json")

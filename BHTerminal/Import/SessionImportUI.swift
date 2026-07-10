@@ -21,6 +21,14 @@ enum SessionImportUI {
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
+        // A session export is tiny (KBs). Reject anything huge before reading
+        // it into memory, so a pathological file can't balloon/OOM the app.
+        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > 25_000_000 {
+            alert(style: .warning, title: "File too large",
+                  message: "“\(url.lastPathComponent)” is over 25 MB — that's far larger than any session export. Import cancelled.")
+            return
+        }
+
         guard let contents = readText(url) else {
             alert(style: .warning, title: "Couldn't read file",
                   message: "“\(url.lastPathComponent)” couldn't be read as text.")

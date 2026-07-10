@@ -139,7 +139,7 @@ enum SessionImportCommitter {
                     parentID = existing
                     continue
                 }
-                let folder = store.addFolder(HostFolder(name: component, parentFolderID: parentID))
+                let folder = store.addFolder(HostFolder(name: sanitizedName(component), parentFolderID: parentID))
                 result.importedFolders += 1
                 folderCache[key] = folder.id
                 parentID = folder.id
@@ -166,7 +166,7 @@ enum SessionImportCommitter {
 
             let hasPassword = !(session.password ?? "").isEmpty
             let host = Host(
-                name: session.name.isEmpty ? session.hostname : session.name,
+                name: sanitizedName(session.name.isEmpty ? session.hostname : session.name),
                 hostname: session.hostname,
                 port: session.port,
                 username: username,
@@ -180,10 +180,24 @@ enum SessionImportCommitter {
             result.importedHosts += 1
 
             // The secret goes to the Keychain keyed by the new host's id —
-            // never into sessions.json.
+            // never into sessions.json. If the write fails, warn loudly: the
+            // user may be about to delete the plaintext source file.
             if let password = session.password, !password.isEmpty {
-                try? KeychainService.save(account: saved.keychainAccount, secret: password)
+                do {
+                    try KeychainService.save(account: saved.keychainAccount, secret: password)
+                } catch {
+                    result.warnings.append("Couldn't save the password for “\(saved.name)” to the Keychain — you'll be prompted for it on connect. (Keep your export file until you've confirmed this host.)")
+                }
             }
         }
+    }
+
+    /// Import names come from untrusted files — clamp length and strip control
+    /// characters so a hostile export can't stuff megabyte-long or
+    /// newline-laden names into sessions.json or the sidebar.
+    private static func sanitizedName(_ raw: String) -> String {
+        let scalars = raw.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }
+        let cleaned = String(String.UnicodeScalarView(scalars)).trimmingCharacters(in: .whitespaces)
+        return String(cleaned.prefix(200))
     }
 }
