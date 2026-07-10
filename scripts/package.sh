@@ -13,12 +13,19 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-DD=build/dd
+DD=build/pkg
 APP="$DD/Build/Products/Release/BHTerminal.app"
 
 echo "==> Generating project + building Release"
-command -v xcodegen >/dev/null && xcodegen generate
-rm -rf "$DD"
+if command -v xcodegen >/dev/null; then xcodegen generate; fi
+# Build products can end up read-only; make writable before removing. If the
+# dir is somehow owned by another user (root), bail with a clear message.
+chmod -R u+w "$DD" 2>/dev/null || true
+rm -rf "$DD" 2>/dev/null || true
+if [ -d "$DD" ]; then
+    echo "❌ Couldn't clear $DD (likely owned by root). Run: sudo rm -rf $DD" >&2
+    exit 1
+fi
 xcodebuild -project BHTerminal.xcodeproj -scheme BHTerminal \
   -configuration Release -destination 'platform=macOS' \
   -derivedDataPath "$DD" build

@@ -8,7 +8,12 @@ enum SessionImportUI {
     static func run(into store: SessionStore) {
         let panel = NSOpenPanel()
         panel.title = "Import Sessions"
-        panel.message = "Choose a MobaXterm export (.mxtsessions / .mobaconf / MobaXterm.ini) or an SSH config file."
+        panel.message = """
+        Choose a file to import:
+        • MobaXterm passwords export (.txt) — hosts + passwords. In MobaXterm: Settings → Configuration → General → “MobaXterm passwords management” → Export to file.
+        • MobaXterm sessions (.mxtsessions) — names + folders, no passwords.
+        • OpenSSH config (~/.ssh/config).
+        """
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false

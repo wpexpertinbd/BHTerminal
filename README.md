@@ -72,6 +72,44 @@ The first time BHTerminal reads a saved host password, macOS asks for your
 **Always Allow** — you'll only see this once. (BHTerminal is signed with a
 stable certificate, so the grant persists across app updates.)
 
+## Migrating from MobaXterm
+
+**Import Sessions…** lives in the sidebar's **`+`** menu (and **File → Import
+Sessions…**, ⇧⌘I). Two MobaXterm exports are supported:
+
+### Option A — bring your passwords across (recommended)
+
+MobaXterm's password export includes host, port, user **and** the saved
+password, so you get a complete migration:
+
+1. In MobaXterm: **Settings → Configuration → General → "MobaXterm passwords
+   management" → Export to file**. It asks for your **master password** and
+   saves a `.txt`.
+2. In BHTerminal: sidebar **`+` → Import Sessions…** → pick that `.txt`.
+   Every host is created with its password stored in your **macOS Keychain**.
+3. ⚠️ **Delete the `.txt` afterward** — it holds all your passwords in
+   cleartext. BHTerminal's copy is safe in the Keychain.
+
+*Note:* this export contains no session names or folders (MobaXterm keeps
+those separately), so hosts arrive named `user@host` in one folder. Use
+Option B as well if you want your names and folder tree.
+
+### Option B — bring your names + folder structure (no passwords)
+
+1. In MobaXterm: right-click **User sessions → Export sessions (.mxtsessions)**.
+2. Import that file — session names and nested folders come across; re-enter
+   passwords per host (they go into the Keychain).
+
+### Not supported: the encrypted `.mobaconf` backup
+
+A master-password-protected **full configuration** (`.mobaconf`) is encrypted
+with an undocumented scheme and can't be read directly — export via Option A or
+B instead. (BHTerminal detects an encrypted `.mobaconf` and tells you this.)
+
+### From an SSH config
+
+An OpenSSH `~/.ssh/config` imports too (Host / HostName / Port / User).
+
 ## Building from source
 
 ```sh
