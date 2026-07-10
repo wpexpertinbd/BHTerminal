@@ -17,6 +17,14 @@ struct BHTerminalApp: App {
         }
         .defaultSize(width: 1280, height: 800)
         .windowToolbarStyle(.unified)
+        .commands {
+            CommandGroup(after: .newItem) {
+                Button("Import Sessions…") {
+                    SessionImportUI.run(into: store)
+                }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
+            }
+        }
 
         Settings {
             PreferencesView()

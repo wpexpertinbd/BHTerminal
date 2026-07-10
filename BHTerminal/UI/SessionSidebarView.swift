@@ -85,6 +85,10 @@ struct SessionSidebarView: View {
                     Button("New Folder…", systemImage: "folder.badge.plus") {
                         sheetTarget = .newFolder(parentID: nil)
                     }
+                    Divider()
+                    Button("Import Sessions…", systemImage: "square.and.arrow.down") {
+                        SessionImportUI.run(into: store)
+                    }
                 } label: {
                     Image(systemName: "plus")
                 }
