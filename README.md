@@ -1,140 +1,83 @@
-# BHTerminal
+<h1 align="center">BHTerminal</h1>
 
-A native macOS SSH / SFTP / VNC client — a MobaXterm-style workspace with a
-session tree, a real terminal, a file browser, and remote-desktop tabs, all in
-one window.
+<p align="center">
+  A free, open-source <b>SSH / SFTP / VNC client</b> for <b>macOS, Windows, and Linux</b>.<br>
+  A MobaXterm/Termius-style workspace — session tree, terminal, file browser, and<br>
+  remote desktops in one window. Imports your MobaXterm sessions.
+</p>
 
-Built by [BiswasHost](https://biswashost.com).
+<p align="center"><i>Built and maintained by <a href="https://www.biswashost.com">BiswasHost</a> 🇧🇩</i></p>
 
-![Terminal on the left-following file browser](docs/screenshot.png)
+---
+
+## Platforms
+
+| OS | What it is | Status | Folder |
+|----|-----------|--------|--------|
+| 🍎 **macOS** | Native SwiftUI/AppKit app — SSH terminal (tabs + split panes), SFTP browser, VNC, tunnels, menu-bar mode. Signed `.dmg`/`.pkg`. | ✅ **shipping v1.0.0** | [`macos/`](macos/) |
+| 🪟 **Windows** | Native shell (ConPTY + `ssh.exe`, SFTP, VNC) over the same feature spec | ⬜ planned | [`windows/`](windows/) |
+| 🐧 **Linux** | Native shell (VTE/GTK, `ssh` in a pty, SFTP, VNC) | ⬜ planned | [`linux/`](linux/) |
+
+**macOS users:** grab the latest `.dmg`/`.pkg` from the
+[**latest release**](https://github.com/wpexpertinbd/BHTerminal/releases/latest)
+and see [`macos/README.md`](macos/README.md).
 
 ## Features
 
-- **Sessions sidebar** — organize hosts in folders, quick-connect filter,
-  double-click to connect.
-- **Real SSH terminal** — spawns your system `ssh`, so `~/.ssh/config`, the SSH
-  agent, `ProxyJump`, keyboard-interactive/2FA, and host-key prompts all just
-  work. Tabs + split panes, broadcast-input to every pane, snippets, and
-  optional session logging.
-- **SFTP file browser** — drag-and-drop upload/download, rename/delete/mkdir,
-  and a breadcrumb path that **follows your terminal's directory** as you `cd`.
-- **VNC** — connect to remote desktops in the same tabbed window (not a separate
-  app), password auth, opt-in clipboard sharing.
-- **SSH tunnels** — local / remote / dynamic (SOCKS) port forwards, managed per
-  host, that keep running in the background.
-- **Menu-bar mode** — close the window and BHTerminal keeps running in the menu
-  bar (tunnels stay up); reopen or quit from the top-bar icon.
-- **Launch at login** — optional, in Preferences.
-- **Secure by design** — passwords/passphrases live only in the macOS Keychain
-  (never in the config file), the SFTP connection verifies host keys against
-  `~/.ssh/known_hosts`, and the app ships with Hardened Runtime.
+- **Sessions sidebar** — folders + hosts, quick-connect filter, double-click to connect.
+- **Real SSH terminal** — runs your system `ssh`, so `~/.ssh/config`, the agent,
+  `ProxyJump`, and 2FA all work. Tabs + split panes, broadcast-input, snippets, session logging.
+- **SFTP browser** — drag-and-drop transfer, and a path that **follows your terminal's directory**.
+- **VNC** remote desktops in the same tabbed window.
+- **SSH tunnels** — local / remote / dynamic, kept running in the background.
+- **Menu-bar mode** — close the window and it keeps running (tunnels stay up).
+- **Import from MobaXterm** (`.txt` passwords export or `.mxtsessions`) and `~/.ssh/config`.
+- **Secure by design** — secrets only in the OS keychain, host-key verification, argument-injection hardened.
 
-## Requirements
+## How it works — one spec, native shells
 
-- macOS 14 (Sonoma) or later — Apple Silicon or Intel.
+A terminal client has no single portable core: SSH, SFTP, VNC, PTY, credential
+storage, and UI each want a different best-in-class library per OS. So the shared
+thing here isn't code — it's the **contract**:
 
-## Install
+- **[`docs/PORTING.md`](docs/PORTING.md)** — the OS-neutral spec: the feature set,
+  the config-compatible data model, and the **mandatory security rules** every
+  port must pass. **The contract.**
+- **[`macos/`](macos/)** — the reference implementation (Swift). Ports translate
+  its headless core (data model, credential store, argv validator, import
+  parsers) then wire a native shell.
 
-Download the latest **`BHTerminal-x.y.z.dmg`** or **`.pkg`** from the
-[Releases](../../releases) page.
+Every port stays **config-compatible** — the same `sessions.json` model — so your
+sessions move between platforms.
 
-- **DMG:** open it, drag **BHTerminal** onto the **Applications** folder.
-- **PKG:** open it and follow the installer (installs to `/Applications`).
+> Porting to a new OS? Read [`docs/PORTING.md`](docs/PORTING.md), build the
+> headless core first (with tests), then wire the terminal (`ssh` in a pty),
+> SFTP, VNC, tunnels, and the tray.
 
-## First launch — allowing an unsigned app
-
-BHTerminal is signed but **not notarized by Apple** (notarization requires a paid
-Apple Developer account). So the first time you open it, macOS will say it
-*"could not verify BHTerminal is free of malware."* This is expected — you just
-approve it once:
-
-**On macOS 15 (Sequoia) / 26 (Tahoe):**
-1. Double-click **BHTerminal** — macOS blocks it and shows the warning. Click
-   **Done**.
-2. Open **System Settings → Privacy & Security**, scroll down to the
-   *"BHTerminal was blocked…"* message, and click **Open Anyway**.
-3. Confirm with Touch ID / your password. BHTerminal opens and won't ask again.
-
-*(On the `.pkg`, if the installer refuses to open, right-click it in Finder →
-**Open** → **Open**.)*
-
-You can verify the signature yourself in Terminal:
-
-```sh
-codesign -dvv /Applications/BHTerminal.app     # Authority=BHTerminal Dev
-codesign --verify --deep --strict /Applications/BHTerminal.app   # (no output = valid)
+## Repository layout
 ```
-
-## Saved-password prompt
-
-The first time BHTerminal reads a saved host password, macOS asks for your
-**login keychain password** (your Mac account password). Enter it and click
-**Always Allow** — you'll only see this once. (BHTerminal is signed with a
-stable certificate, so the grant persists across app updates.)
-
-## Migrating from MobaXterm
-
-**Import Sessions…** lives in the sidebar's **`+`** menu (and **File → Import
-Sessions…**, ⇧⌘I). Two MobaXterm exports are supported:
-
-### Option A — bring your passwords across (recommended)
-
-MobaXterm's password export includes host, port, user **and** the saved
-password, so you get a complete migration:
-
-1. In MobaXterm: **Settings → Configuration → General → "MobaXterm passwords
-   management" → Export to file**. It asks for your **master password** and
-   saves a `.txt`.
-2. In BHTerminal: sidebar **`+` → Import Sessions…** → pick that `.txt`.
-   Every host is created with its password stored in your **macOS Keychain**.
-3. ⚠️ **Delete the `.txt` afterward** — it holds all your passwords in
-   cleartext. BHTerminal's copy is safe in the Keychain.
-
-*Note:* this export contains no session names or folders (MobaXterm keeps
-those separately), so hosts arrive named `user@host` in one folder. Use
-Option B as well if you want your names and folder tree.
-
-### Option B — bring your names + folder structure (no passwords)
-
-1. In MobaXterm: right-click **User sessions → Export sessions (.mxtsessions)**.
-2. Import that file — session names and nested folders come across; re-enter
-   passwords per host (they go into the Keychain).
-
-### Not supported: the encrypted `.mobaconf` backup
-
-A master-password-protected **full configuration** (`.mobaconf`) is encrypted
-with an undocumented scheme and can't be read directly — export via Option A or
-B instead. (BHTerminal detects an encrypted `.mobaconf` and tells you this.)
-
-### From an SSH config
-
-An OpenSSH `~/.ssh/config` imports too (Host / HostName / Port / User).
-
-## Building from source
-
-```sh
-brew install xcodegen
-xcodegen generate
-open BHTerminal.xcodeproj
+.
+├── docs/PORTING.md   # shared spec + security contract for all ports
+├── macos/            # shipping macOS app (SwiftUI/AppKit) + installers
+├── windows/          # Windows port (planned)
+├── linux/            # Linux port (planned)
+├── LICENSE           # MIT
+├── SECURITY.md
+└── DISCLAIMER.md     # not affiliated with MobaXterm / Termius
 ```
-
-Then build/run in Xcode, or from the command line:
-
-```sh
-xcodebuild -scheme BHTerminal -configuration Release build
-```
-
-The project signs with a local self-signed **"BHTerminal Dev"** code-signing
-certificate. To build on a fresh machine, create one in **Keychain Access →
-Certificate Assistant → Create a Certificate** (Self-Signed Root, type: Code
-Signing), or change `CODE_SIGN_IDENTITY` in `project.yml` to `-` (ad-hoc).
-
-## Credits
-
-- [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) — terminal emulator
-- [Citadel](https://github.com/orlandos-nl/Citadel) — SFTP client
-- [RoyalVNCKit](https://github.com/royalapplications/royalvnc) — VNC client
 
 ## License
+MIT — see [`LICENSE`](LICENSE). Not affiliated with, endorsed by, or derived from
+MobaXterm, Termius, or any other product — see [`DISCLAIMER.md`](DISCLAIMER.md).
 
-© 2026 BiswasHost.
+## ☕ Support
+
+This project is free and open-source. If it made your server work easier, you can
+**buy me a coffee** — it genuinely helps me keep building and maintaining free
+tools like this. 🙏
+
+- **bKash** (Personal · *Send Money*): **`01710378396`**
+
+ধন্যবাদ! / Thank you!
+
+<p align="center">Made with care by <a href="https://www.biswashost.com">BiswasHost</a> 🇧🇩</p>
