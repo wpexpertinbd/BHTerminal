@@ -223,12 +223,10 @@ struct SFTPBrowserView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        // Whole-width hit area for selection; single-click selects (List),
+        // double-click navigates (the List's primaryAction). No tap gesture
+        // here — one would swallow the click and kill the selection highlight.
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            if entry.isDirectory {
-                Task { await connection.navigate(to: entry) }
-            }
-        }
     }
 
     private func icon(for entry: SFTPEntry) -> String {

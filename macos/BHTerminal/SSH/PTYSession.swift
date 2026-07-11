@@ -68,6 +68,49 @@ final class PTYSession: LocalProcessTerminalView {
         process.send(data: ArraySlice(Array((text + "\r").utf8)))
     }
 
+    // MARK: - Right-click Copy / Paste / Select
+
+    /// SwiftTerm's TerminalView already implements copy/paste/selectAll and
+    /// exposes `getSelection()` / `selectionActive`; it just doesn't provide a
+    /// context menu. NSView calls `menu(for:)` on right-click, so wire one up.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = NSMenu()
+        addContextItem(menu, "Copy", #selector(contextCopy))
+        addContextItem(menu, "Paste", #selector(contextPaste))
+        menu.addItem(.separator())
+        addContextItem(menu, "Select All", #selector(contextSelectAll))
+        addContextItem(menu, "Copy All", #selector(contextCopyAll))
+        return menu
+    }
+
+    private func addContextItem(_ menu: NSMenu, _ title: String, _ action: Selector) {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        menu.addItem(item)
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(contextCopy):
+            return selectionActive
+        case #selector(contextPaste):
+            return NSPasteboard.general.string(forType: .string) != nil
+        case #selector(contextSelectAll), #selector(contextCopyAll):
+            return true
+        default:
+            // Defer non-context items (e.g. the app's Edit menu) to SwiftTerm.
+            return validateUserInterfaceItem(menuItem)
+        }
+    }
+
+    @objc private func contextCopy() { copy(self) }
+    @objc private func contextPaste() { paste(self) }
+    @objc private func contextSelectAll() { selectAll(nil) }
+    @objc private func contextCopyAll() {
+        selectAll(nil)
+        copy(self)
+    }
+
     func startLogging(to url: URL) throws {
         stopLogging()
         if !FileManager.default.fileExists(atPath: url.path) {
