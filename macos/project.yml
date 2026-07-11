@@ -9,9 +9,6 @@ packages:
   SwiftTerm:
     url: https://github.com/migueldeicaza/SwiftTerm
     from: 1.13.0
-  Citadel:
-    url: https://github.com/orlandos-nl/Citadel
-    from: 0.12.1
   RoyalVNCKit:
     url: https://github.com/royalapplications/royalvnc
     branch: main
@@ -25,12 +22,11 @@ targets:
       - path: BHTerminal
     dependencies:
       - package: SwiftTerm
-      - package: Citadel
       # RoyalVNCKit's SPM product is a DYNAMIC library, so it must be copied
       # into the app bundle (Contents/Frameworks) and signed — otherwise the
       # distributed .app crashes at launch with "Library not loaded:
-      # @rpath/RoyalVNCKit.framework". (SwiftTerm/Citadel are static, so they
-      # link in and need no embedding.)
+      # @rpath/RoyalVNCKit.framework". (SwiftTerm is static, so it links in
+      # and needs no embedding.)
       - package: RoyalVNCKit
         embed: true
         link: true
@@ -48,7 +44,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.biswashost.BHTerminal
         PRODUCT_NAME: BHTerminal
-        MARKETING_VERSION: "1.0.0"
+        MARKETING_VERSION: "1.1.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5"
         SWIFT_STRICT_CONCURRENCY: minimal

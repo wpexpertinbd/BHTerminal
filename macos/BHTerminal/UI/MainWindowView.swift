@@ -72,7 +72,11 @@ struct MainWindowView: View {
             tabs.append(.terminal(tab))
             selectedTabID = tab.id
         }
-        Task { await sftpConnection.connect(to: host) }
+        Task {
+            await sftpConnection.connect(to: host) { jumpID in
+                store.hosts.first { $0.id == jumpID }
+            }
+        }
     }
 
     private func connectVNC(_ host: Host) {

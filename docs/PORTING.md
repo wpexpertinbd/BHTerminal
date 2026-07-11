@@ -53,7 +53,7 @@ move between platforms.
 |-----------|-------------------|---------|-------|
 | Terminal emulator view | [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) | [xterm.js] (Electron) / ConPTY + a native widget / [WinUI](https://learn.microsoft.com/windows/apps/winui/) | [VTE](https://gitlab.gnome.org/GNOME/vte) (GTK) / xterm.js (Electron) |
 | Interactive SSH | system `/usr/bin/ssh` in a pty | `ssh.exe` (OpenSSH for Windows) via ConPTY, or [libssh2] | system `ssh` in a pty |
-| SFTP (structured) | [Citadel](https://github.com/orlandos-nl/Citadel) | [SSH.NET] / libssh2 / `ssh2` (Node) | [libssh]/paramiko/`ssh2` |
+| SFTP (structured) | the **SFTP subsystem over real ssh** (`ssh -s … sftp`), reusing the terminal's multiplexed connection | same (ConPTY `ssh.exe -s`) | same (`ssh -s`) |
 | VNC | [RoyalVNCKit](https://github.com/royalapplications/royalvnc) | [noVNC]/native RFB | [gtk-vnc]/noVNC |
 | Credential store | Keychain | Windows Credential Manager (DPAPI) | Secret Service / libsecret (GNOME Keyring / KWallet) |
 | Tunnels | background `ssh -N -L/-R/-D` Process | same, with `ssh.exe` | same |
@@ -64,7 +64,12 @@ move between platforms.
 **Recommended reuse of the terminal:** just like macOS, spawn the platform's own
 `ssh` binary in a pty (ConPTY on Windows, a pty on Linux). You inherit the user's
 SSH config, agent, keys, ProxyJump, and 2FA for free, and you don't reimplement
-crypto. Use a dedicated SFTP library only for the file browser.
+crypto. **Do the same for SFTP:** open the SFTP subsystem over real ssh
+(`ssh -o ControlPath=<shared> -s -- host sftp`) reusing the terminal's
+multiplexed master connection, and speak the SFTP v3 wire protocol over that
+process's stdin/stdout (see `macos/BHTerminal/SSH/SFTPProtocolClient.swift`).
+That way the file browser gets keys/agent/passphrase/2FA/ProxyJump for free too —
+no in-process SSH library, no separate credential path.
 
 ## 4. UX contract (what "the same app" means)
 
@@ -81,8 +86,10 @@ crypto. Use a dedicated SFTP library only for the file browser.
 These are not optional; they're why BHTerminal is safe to hand your servers to.
 
 1. **Secrets only in the OS credential store**, never in the JSON config or logs.
-2. **known_hosts verification, fail-closed** for the structured-SSH/SFTP path.
-   Never trust-on-first-use silently.
+2. **Host-key verification.** Running both terminal and SFTP over the real
+   `ssh` binary gets you the user's `known_hosts` handling for free — keep it
+   that way. If a port ever uses an in-process SSH library instead, it must
+   verify against `known_hosts` and fail closed (never trust-on-first-use).
 3. **Argument-injection guard.** Before building any `ssh` argv, validate
    `hostname` and `username` against an allow-list (letters, digits, and
    `.-_:%[]` for hosts; `.-_` for users; no leading `-`, no whitespace/shell

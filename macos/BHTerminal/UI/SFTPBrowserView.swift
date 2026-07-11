@@ -41,6 +41,14 @@ struct SFTPBrowserView: View {
                 errorBanner(error)
             }
         }
+        .overlay {
+            if connection.entries.isEmpty, let status = connection.statusMessage {
+                VStack(spacing: 10) {
+                    ProgressView()
+                    Text(status).font(.callout).foregroundStyle(.secondary)
+                }
+            }
+        }
         .sheet(item: $sheet) { sheet in
             sheetContent(sheet)
         }

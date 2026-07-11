@@ -137,7 +137,6 @@ Signing), or change `CODE_SIGN_IDENTITY` in `project.yml` to `-` (ad-hoc).
 ## Credits
 
 - [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) — terminal emulator
-- [Citadel](https://github.com/orlandos-nl/Citadel) — SFTP client
 - [RoyalVNCKit](https://github.com/royalapplications/royalvnc) — VNC client
 
 ## License

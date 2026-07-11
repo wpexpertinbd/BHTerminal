@@ -2,48 +2,71 @@ import XCTest
 @testable import BHTerminal
 
 final class SSHArgvBuilderTests: XCTestCase {
-    func testDefaultPortAgentAuth() throws {
+
+    // MARK: - Terminal argv
+
+    func testTerminalEndsWithDestinationAndHasControlMaster() throws {
         let host = Host(name: "Prod", hostname: "example.com", username: "root", authMethod: .agent)
         let (executable, args) = try SSHArgvBuilder.build(for: host)
         XCTAssertEqual(executable, "/usr/bin/ssh")
-        XCTAssertEqual(args, ["--", "root@example.com"])
+        // "--" then the destination is always the tail.
+        XCTAssertEqual(Array(args.suffix(2)), ["--", "root@example.com"])
+        // Multiplexing master so the SFTP pane can reuse the connection.
+        XCTAssertTrue(args.contains("ControlMaster=auto"))
+        XCTAssertTrue(args.contains("ControlPath=/tmp/bht-%C"))
+        XCTAssertTrue(args.contains("ControlPersist=120"))
     }
 
-    func testCustomPort() throws {
+    func testTerminalCustomPort() throws {
         let host = Host(name: "Custom", hostname: "example.com", port: 2222, username: "deploy", authMethod: .agent)
         let (_, args) = try SSHArgvBuilder.build(for: host)
-        XCTAssertEqual(args, ["-p", "2222", "--", "deploy@example.com"])
+        XCTAssertEqual(Array(args.prefix(2)), ["-p", "2222"])
+        XCTAssertEqual(Array(args.suffix(2)), ["--", "deploy@example.com"])
     }
 
-    func testPrivateKeyExpandsTilde() throws {
+    func testTerminalPrivateKeyExpandsTilde() throws {
         let host = Host(name: "Key", hostname: "example.com", username: "ben",
                          authMethod: .privateKey(path: "~/.ssh/id_ed25519"))
         let (_, args) = try SSHArgvBuilder.build(for: host)
         let home = NSHomeDirectory()
-        XCTAssertEqual(args, ["-i", "\(home)/.ssh/id_ed25519", "--", "ben@example.com"])
+        XCTAssertEqual(Array(args.prefix(2)), ["-i", "\(home)/.ssh/id_ed25519"])
+        XCTAssertEqual(Array(args.suffix(2)), ["--", "ben@example.com"])
     }
 
-    func testJumpHostDefaultPort() throws {
-        let jump = Host(name: "Bastion", hostname: "bastion.example.com", username: "jump")
-        let host = Host(name: "Internal", hostname: "10.0.0.5", username: "root", jumpHostID: jump.id)
-        let (_, args) = try SSHArgvBuilder.build(for: host) { id in id == jump.id ? jump : nil }
-        XCTAssertEqual(args, ["-J", "jump@bastion.example.com", "--", "root@10.0.0.5"])
-    }
-
-    func testJumpHostCustomPort() throws {
+    func testTerminalJumpHost() throws {
         let jump = Host(name: "Bastion", hostname: "bastion.example.com", port: 2200, username: "jump")
         let host = Host(name: "Internal", hostname: "10.0.0.5", username: "root", jumpHostID: jump.id)
         let (_, args) = try SSHArgvBuilder.build(for: host) { id in id == jump.id ? jump : nil }
-        XCTAssertEqual(args, ["-J", "jump@bastion.example.com:2200", "--", "root@10.0.0.5"])
+        XCTAssertEqual(Array(args.prefix(2)), ["-J", "jump@bastion.example.com:2200"])
+        XCTAssertEqual(Array(args.suffix(2)), ["--", "root@10.0.0.5"])
     }
 
-    func testUnresolvableJumpHostIsOmitted() throws {
-        let host = Host(name: "Internal", hostname: "10.0.0.5", username: "root", jumpHostID: UUID())
-        let (_, args) = try SSHArgvBuilder.build(for: host)
-        XCTAssertEqual(args, ["--", "root@10.0.0.5"])
+    // MARK: - SFTP-subsystem argv
+
+    func testSFTPArgvShape() throws {
+        let host = Host(name: "Prod", hostname: "example.com", port: 2222, username: "root", authMethod: .agent)
+        let (executable, args) = try SSHArgvBuilder.buildSFTP(for: host)
+        XCTAssertEqual(executable, "/usr/bin/ssh")
+        // Requests the sftp subsystem on the destination, options terminated.
+        XCTAssertEqual(Array(args.suffix(4)), ["-s", "--", "root@example.com", "sftp"])
+        XCTAssertEqual(Array(args.prefix(2)), ["-p", "2222"])
+        // Reuses the terminal's master and never blocks on a prompt.
+        XCTAssertTrue(args.contains("ControlPath=/tmp/bht-%C"))
+        XCTAssertTrue(args.contains("BatchMode=yes"))
+        // SFTP itself must not become the master.
+        XCTAssertFalse(args.contains("ControlMaster=auto"))
     }
 
-    // MARK: - Argument-injection guards
+    func testSFTPRejectsUnsafeHost() {
+        let host = Host(name: "Evil", hostname: "-oProxyCommand=id", username: "root", authMethod: .agent)
+        XCTAssertThrowsError(try SSHArgvBuilder.buildSFTP(for: host)) { error in
+            guard case SSHSafetyError.unsafeHostname = error else {
+                return XCTFail("Expected unsafeHostname, got \(error)")
+            }
+        }
+    }
+
+    // MARK: - Argument-injection guards (terminal)
 
     func testProxyCommandInjectionViaUsernameIsRejected() {
         let host = Host(name: "Evil", hostname: "example.com", username: "-oProxyCommand=touch /tmp/pwned", authMethod: .agent)

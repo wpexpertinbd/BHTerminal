@@ -18,9 +18,11 @@ You'll get a response as soon as possible.
   verification, known-hosts, your keys, and your SSH agent all work exactly as
   they do in Terminal.app. BHTerminal does not reimplement the SSH transport for
   interactive sessions.
-- **The SFTP pane verifies host keys against your `~/.ssh/known_hosts`** (both
-  plain and HMAC-hashed entries) and **fails closed** for unknown hosts — it does
-  not trust-on-first-use.
+- **The SFTP pane also runs over your real `ssh`** (the SFTP subsystem,
+  reusing the terminal's authenticated connection), so it authenticates with
+  your keys / agent / passphrase / 2FA / ProxyJump and gets the same
+  `~/.ssh/known_hosts` host-key verification as the terminal — no separate
+  credential path.
 - **Argument-injection hardened.** Hostnames/usernames are allow-list validated
   (rejecting values like `-oProxyCommand=…`), and every `ssh` invocation ends
   option parsing with `--` before the destination, so a crafted host can't turn

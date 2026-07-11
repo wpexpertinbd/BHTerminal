@@ -10,31 +10,64 @@ enum SSHArgvBuilder {
     static func build(for host: Host, resolveJumpHost: (UUID) -> Host? = { _ in nil }) throws -> (executable: String, args: [String]) {
         try SSHSafety.validate(host, resolveJumpHost: resolveJumpHost)
 
-        var args: [String] = []
+        var args = connectionOptions(for: host, resolveJumpHost: resolveJumpHost)
 
-        if host.port != 22 {
-            args += ["-p", String(host.port)]
-        }
-
-        if case .privateKey(let path) = host.authMethod {
-            args += ["-i", expandPath(path)]
-        }
-
-        if let jumpID = host.jumpHostID, let jumpHost = resolveJumpHost(jumpID) {
-            // -J's spec embeds the port inline (user@host:port); this is
-            // NOT valid syntax for the primary destination below, which
-            // takes its port via a separate -p flag instead.
-            args += ["-J", jumpSpec(jumpHost)]
-        }
+        // Become the multiplexing master so the SFTP pane can reuse this
+        // authenticated connection (keys/agent/passphrase/2FA), with the
+        // socket persisting briefly after the terminal closes.
+        args += ["-o", "ControlMaster=auto",
+                 "-o", "ControlPath=\(controlPath)",
+                 "-o", "ControlPersist=120"]
 
         // "--" ends ssh option parsing so the destination operand can never
         // be re-read as an option (defense in depth alongside SSHSafety's
         // leading-dash rejection above).
         args.append("--")
-        args.append("\(host.username)@\(host.hostname)")
+        args.append(destination(for: host))
 
         return ("/usr/bin/ssh", args)
     }
+
+    /// argv for opening the SFTP subsystem over real ssh, reusing the
+    /// terminal's multiplexed connection when it exists. `BatchMode=yes` means
+    /// it never blocks on a passphrase prompt (it has no tty): if the master
+    /// isn't up yet it fails fast and SFTPConnection retries until it is.
+    static func buildSFTP(for host: Host, resolveJumpHost: (UUID) -> Host? = { _ in nil }) throws -> (executable: String, args: [String]) {
+        try SSHSafety.validate(host, resolveJumpHost: resolveJumpHost)
+
+        var args = connectionOptions(for: host, resolveJumpHost: resolveJumpHost)
+        args += ["-o", "ControlPath=\(controlPath)",
+                 "-o", "BatchMode=yes",
+                 "-s", "--", destination(for: host), "sftp"]
+
+        return ("/usr/bin/ssh", args)
+    }
+
+    // MARK: - Shared pieces
+
+    /// port / key / jump options common to both the terminal and SFTP argv.
+    private static func connectionOptions(for host: Host, resolveJumpHost: (UUID) -> Host?) -> [String] {
+        var args: [String] = []
+        if host.port != 22 {
+            args += ["-p", String(host.port)]
+        }
+        if case .privateKey(let path) = host.authMethod {
+            args += ["-i", expandPath(path)]
+        }
+        if let jumpID = host.jumpHostID, let jumpHost = resolveJumpHost(jumpID) {
+            args += ["-J", jumpSpec(jumpHost)]
+        }
+        return args
+    }
+
+    private static func destination(for host: Host) -> String {
+        "\(host.username)@\(host.hostname)"
+    }
+
+    /// Control socket shared between the terminal and SFTP for a host. `%C` is
+    /// ssh's own hash of (localhost, remotehost, port, user) — short, and it
+    /// resolves identically for both invocations, so they share one master.
+    private static let controlPath = "/tmp/bht-%C"
 
     /// Shared with TunnelArgvBuilder — the -J embedded-port spec format.
     static func jumpSpec(_ host: Host) -> String {
