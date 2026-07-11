@@ -151,8 +151,12 @@ final class SFTPConnection {
     func download(_ entry: SFTPEntry, to localURL: URL) async {
         guard let client, !entry.isDirectory else { return }
         do {
-            let data = try await client.readFile(join(currentPath, entry.name))
-            try data.write(to: localURL)
+            // Stream to disk rather than buffering the whole file in memory,
+            // so a huge (or malicious never-EOF) file can't exhaust RAM.
+            FileManager.default.createFile(atPath: localURL.path, contents: nil)
+            let handle = try FileHandle(forWritingTo: localURL)
+            defer { try? handle.close() }
+            try await client.downloadFile(join(currentPath, entry.name), to: handle)
         } catch {
             errorMessage = "Download failed: \(describeError(error))"
         }

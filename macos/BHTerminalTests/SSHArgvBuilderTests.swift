@@ -13,7 +13,7 @@ final class SSHArgvBuilderTests: XCTestCase {
         XCTAssertEqual(Array(args.suffix(2)), ["--", "root@example.com"])
         // Multiplexing master so the SFTP pane can reuse the connection.
         XCTAssertTrue(args.contains("ControlMaster=auto"))
-        XCTAssertTrue(args.contains("ControlPath=/tmp/bht-%C"))
+        XCTAssertTrue(args.contains { $0.hasPrefix("ControlPath=") && $0.hasSuffix("/.bhterminal/cm/%C") && !$0.contains("/tmp/") }, "control socket must live in a private ~/.bhterminal/cm dir, not /tmp")
         XCTAssertTrue(args.contains("ControlPersist=120"))
     }
 
@@ -51,7 +51,7 @@ final class SSHArgvBuilderTests: XCTestCase {
         XCTAssertEqual(Array(args.suffix(4)), ["-s", "--", "root@example.com", "sftp"])
         XCTAssertEqual(Array(args.prefix(2)), ["-p", "2222"])
         // Reuses the terminal's master and never blocks on a prompt.
-        XCTAssertTrue(args.contains("ControlPath=/tmp/bht-%C"))
+        XCTAssertTrue(args.contains { $0.hasPrefix("ControlPath=") && $0.hasSuffix("/.bhterminal/cm/%C") && !$0.contains("/tmp/") }, "control socket must live in a private ~/.bhterminal/cm dir, not /tmp")
         XCTAssertTrue(args.contains("BatchMode=yes"))
         // SFTP itself must not become the master.
         XCTAssertFalse(args.contains("ControlMaster=auto"))

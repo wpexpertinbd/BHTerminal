@@ -15,6 +15,9 @@ final class SFTPProtocolClient {
         case unexpectedResponse
         case status(code: UInt32, message: String)
         case connectionClosed
+        case timedOut
+        case protocolViolation(String)
+        case fileTooLarge
 
         var errorDescription: String? {
             switch self {
@@ -22,9 +25,23 @@ final class SFTPProtocolClient {
             case .unexpectedResponse: return "Unexpected SFTP response."
             case .status(_, let message): return message.isEmpty ? "SFTP error." : message
             case .connectionClosed: return "SFTP connection closed."
+            case .timedOut: return "The SFTP server did not respond in time."
+            case .protocolViolation(let why): return "SFTP protocol error: \(why)"
+            case .fileTooLarge: return "File is too large to transfer in memory."
             }
         }
     }
+
+    // Hostile-server guards. OpenSSH caps SFTP packets at 256 KB; 4 MB is a
+    // generous ceiling that still bounds a malicious "huge length" to a safe
+    // amount of memory rather than the claimed ~4 GB.
+    private static let maxPacketLength = 4 * 1024 * 1024
+    /// Cap on a whole-file read held in memory (used by the test/small reads;
+    /// real downloads stream to disk via `downloadFile`).
+    private static let maxInMemoryFileBytes = 256 * 1024 * 1024
+    private static let requestTimeout: TimeInterval = 30
+    private static let handshakeTimeout: TimeInterval = 20
+    private static let maxDirectoryEntries = 2_000_000
 
     // Packet types (RFC draft-ietf-secsh-filexfer-02, SFTP v3).
     private enum PktType {
@@ -67,6 +84,8 @@ final class SFTPProtocolClient {
     private let writeHandle: FileHandle
     private let readHandle: FileHandle
     private let readerQueue = DispatchQueue(label: "com.biswashost.BHTerminal.sftp.reader")
+    private let writeQueue = DispatchQueue(label: "com.biswashost.BHTerminal.sftp.writer")
+    private let timeoutQueue = DispatchQueue(label: "com.biswashost.BHTerminal.sftp.timeout")
     private let lock = NSLock()
 
     private var nextRequestID: UInt32 = 0
@@ -158,16 +177,27 @@ final class SFTPProtocolClient {
             guard type == PktType.NAME else { throw SFTPError.unexpectedResponse }
             var r = ByteReader(body); _ = r.u32()
             let count = r.u32()
-            for _ in 0..<count {
+            // `count` is attacker-controlled (up to 4 billion); trust the bytes
+            // actually present, not the claimed count, and cap the total so a
+            // server streaming endless NAME packets can't grow us without bound.
+            var i: UInt32 = 0
+            while i < count, !r.isAtEnd {
                 let name = r.stringUTF8()
                 let longname = r.stringUTF8()
                 let attrs = Self.readAttributes(&r, longname: longname)
                 entries.append(Entry(filename: name, longname: longname, attributes: attrs))
+                i += 1
+            }
+            guard entries.count <= Self.maxDirectoryEntries else {
+                throw SFTPError.protocolViolation("directory listing exceeded \(Self.maxDirectoryEntries) entries")
             }
         }
         return entries
     }
 
+    /// Reads a whole file into memory. Used for small reads/tests; real
+    /// downloads use `downloadFile` (streams to disk). Bounded so a never-EOF
+    /// server can't OOM the app.
     func readFile(_ path: String) async throws -> Data {
         let handle = try await open(path, pflags: Flags.READ)
         defer { Task { try? await self.closeHandle(handle) } }
@@ -190,8 +220,35 @@ final class SFTPProtocolClient {
             if piece.isEmpty { break }
             data.append(piece)
             offset += UInt64(piece.count)
+            guard data.count <= Self.maxInMemoryFileBytes else { throw SFTPError.fileTooLarge }
         }
         return data
+    }
+
+    /// Streams a remote file straight to `fileHandle` — a huge or never-EOF
+    /// file can't accumulate in memory this way.
+    func downloadFile(_ path: String, to fileHandle: FileHandle) async throws {
+        let handle = try await open(path, pflags: Flags.READ)
+        defer { Task { try? await self.closeHandle(handle) } }
+        var offset: UInt64 = 0
+        let chunk: UInt32 = 32_768
+        while true {
+            let (type, body) = try await request(PktType.READ) { w in
+                w.data(handle); w.u64(offset); w.u32(chunk)
+            }
+            if type == PktType.STATUS {
+                var r = ByteReader(body); _ = r.u32()
+                let code = r.u32()
+                if code == Self.STATUS_EOF { break }
+                throw SFTPError.status(code: code, message: r.stringUTF8())
+            }
+            guard type == PktType.DATA else { throw SFTPError.unexpectedResponse }
+            var r = ByteReader(body); _ = r.u32()
+            let piece = r.string()
+            if piece.isEmpty { break }
+            try fileHandle.write(contentsOf: piece)
+            offset += UInt64(piece.count)
+        }
     }
 
     func writeFile(_ path: String, data: Data) async throws {
@@ -288,6 +345,7 @@ final class SFTPProtocolClient {
             pending[id] = cont
             lock.unlock()
             write(framed: w.data)
+            scheduleTimeout(id: id, seconds: Self.requestTimeout)
         }
     }
 
@@ -299,9 +357,24 @@ final class SFTPProtocolClient {
             pending[handshakeKey] = cont
             lock.unlock()
             write(framed: payload)
+            scheduleTimeout(id: handshakeKey, seconds: Self.handshakeTimeout)
         }
     }
     private let handshakeKey: UInt32 = 0xFFFF_FFFF
+
+    /// Resumes a pending request with `.timedOut` if no reply arrives. The
+    /// removeValue-under-lock makes resume exactly-once (a late dispatch or
+    /// close finds the id already gone). Without this a stalled server hangs
+    /// the operation forever and leaks the ssh child process.
+    private func scheduleTimeout(id: UInt32, seconds: TimeInterval) {
+        timeoutQueue.asyncAfter(deadline: .now() + seconds) { [weak self] in
+            guard let self else { return }
+            self.lock.lock()
+            let cont = self.pending.removeValue(forKey: id)
+            self.lock.unlock()
+            cont?.resume(throwing: SFTPError.timedOut)
+        }
+    }
 
     private func nextID() -> UInt32 {
         lock.lock(); defer { lock.unlock() }
@@ -315,8 +388,13 @@ final class SFTPProtocolClient {
         out.u32(UInt32(payload.count))
         var full = out.data
         full.append(payload)
-        do { try writeHandle.write(contentsOf: full) }
-        catch { failAll(SFTPError.connectionClosed) }
+        // Serialize all writes off the caller's thread so two concurrent
+        // operations can't interleave bytes and desync the framed stream.
+        writeQueue.async { [weak self] in
+            guard let self else { return }
+            do { try self.writeHandle.write(contentsOf: full) }
+            catch { self.failAll(SFTPError.connectionClosed) }
+        }
     }
 
     // MARK: - Read loop
@@ -338,7 +416,13 @@ final class SFTPProtocolClient {
         var cursor = 0
         while buffer.count - cursor >= 4 {
             let len = Int(u32(buffer, at: cursor))
-            guard buffer.count - cursor - 4 >= len, len >= 1 else { break }
+            if len < 1 || len > Self.maxPacketLength {
+                // Hostile/garbled length — tear down rather than buffer toward a
+                // ~4 GB claim or wedge forever on a zero-length frame.
+                failAll(SFTPError.protocolViolation("packet length \(len) out of range"))
+                return
+            }
+            guard buffer.count - cursor - 4 >= len else { break }
             let start = cursor + 4
             let type = buffer[buffer.startIndex + start]
             let body = Data(buffer[(buffer.startIndex + start + 1)..<(buffer.startIndex + start + len)])
@@ -390,7 +474,10 @@ final class SFTPProtocolClient {
         if flags & Attr.ACMODTIME != 0 { _ = r.u32(); let m = r.u32(); mtime = Date(timeIntervalSince1970: TimeInterval(m)) }
         if flags & Attr.EXTENDED != 0 {
             let count = r.u32()
-            for _ in 0..<count { _ = r.string(); _ = r.string() }
+            var i: UInt32 = 0
+            // `count` is attacker-controlled; stop at the real end of the
+            // buffer instead of spinning up to 4 billion times.
+            while i < count, !r.isAtEnd { _ = r.string(); _ = r.string(); i += 1 }
         }
         let isDir: Bool, isLink: Bool
         if let mode = perms {
@@ -419,6 +506,8 @@ private struct ByteReader {
     private let data: Data
     private var offset: Int
     init(_ d: Data) { data = d; offset = 0 }
+
+    var isAtEnd: Bool { offset >= data.count }
 
     mutating func u32() -> UInt32 {
         guard offset + 4 <= data.count else { offset = data.count; return 0 }

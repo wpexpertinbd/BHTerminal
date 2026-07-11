@@ -67,7 +67,23 @@ enum SSHArgvBuilder {
     /// Control socket shared between the terminal and SFTP for a host. `%C` is
     /// ssh's own hash of (localhost, remotehost, port, user) — short, and it
     /// resolves identically for both invocations, so they share one master.
-    private static let controlPath = "/tmp/bht-%C"
+    ///
+    /// It lives in a per-user 0700 directory, NOT world-writable /tmp: `%C` is
+    /// predictable, so a socket in /tmp could be squatted by another local user
+    /// to hijack (MITM) the multiplexed SSH session or to deny multiplexing.
+    /// A 0700 dir under $HOME can't be entered by other UIDs.
+    private static var controlPath: String {
+        let dir = (NSHomeDirectory() as NSString).appendingPathComponent(".bhterminal/cm")
+        let fm = FileManager.default
+        try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true,
+                                attributes: [.posixPermissions: 0o700])
+        // Enforce 0700 even if the dir (or its parent) pre-existed with looser
+        // permissions — the socket's confidentiality depends on it.
+        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir)
+        try? fm.setAttributes([.posixPermissions: 0o700],
+                              ofItemAtPath: (NSHomeDirectory() as NSString).appendingPathComponent(".bhterminal"))
+        return (dir as NSString).appendingPathComponent("%C")
+    }
 
     /// Shared with TunnelArgvBuilder — the -J embedded-port spec format.
     static func jumpSpec(_ host: Host) -> String {

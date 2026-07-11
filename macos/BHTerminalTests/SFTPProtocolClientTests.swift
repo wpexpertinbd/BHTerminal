@@ -61,6 +61,31 @@ final class SFTPProtocolClientTests: XCTestCase {
         XCTAssertTrue(empty.isEmpty, "expected empty dir, got \(empty.map(\.filename))")
     }
 
+    func testStreamingDownloadToFile() async throws {
+        guard FileManager.default.fileExists(atPath: serverPath) else {
+            throw XCTSkip("no /usr/libexec/sftp-server on this machine")
+        }
+        let client = try await SFTPProtocolClient.launch(executable: serverPath, args: [])
+        defer { client.close() }
+
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bht-sftp-dl-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let base = try await client.realpath(tmp.path)
+
+        let payload = Data((0..<50_000).map { UInt8(($0 * 7) & 0xFF) })
+        try await client.writeFile(base + "/src.bin", data: payload)
+
+        let dest = tmp.appendingPathComponent("dest.bin")
+        FileManager.default.createFile(atPath: dest.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: dest)
+        try await client.downloadFile(base + "/src.bin", to: handle)
+        try handle.close()
+
+        XCTAssertEqual(try Data(contentsOf: dest), payload)
+    }
+
     func testReadFileNotFoundThrows() async throws {
         guard FileManager.default.fileExists(atPath: serverPath) else {
             throw XCTSkip("no /usr/libexec/sftp-server on this machine")
