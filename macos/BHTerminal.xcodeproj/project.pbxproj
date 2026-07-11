@@ -17,6 +17,7 @@
 		339991C514E317889F3D6FF0 /* SFTPEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F42C99D948D0CFFA1DCFA0 /* SFTPEntry.swift */; };
 		35D04ACAE9A17D63A28B3F72 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65F1224F0B9822AC4F40AA0F /* SessionStore.swift */; };
 		3771208B8D8FE7954BBC1F05 /* TerminalContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 368F1D4B3844EB20B853F4F3 /* TerminalContainerView.swift */; };
+		3F0A338E1A9E7C0072FD4512 /* PTYSessionMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F724A49CFE343058E3BD79F4 /* PTYSessionMenuTests.swift */; };
 		414B64E8599D79F8AB26290D /* Host.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1096E66D19ADBEC91A03B6B /* Host.swift */; };
 		43FB471C5DAE5540916D5CE3 /* MobaXtermImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DF0A62857959D9E34FE8A1E /* MobaXtermImporter.swift */; };
 		496AAC13CC4FCE2AA0F799FE /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AD8FB055F3C75C447F751F3 /* PreferencesView.swift */; };
@@ -135,6 +136,7 @@
 		DB56A467A7C3880BBA61AEF4 /* SessionImportUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionImportUI.swift; sourceTree = "<group>"; };
 		E0CE6DACEF067A630E3AA6F0 /* TunnelArgvBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelArgvBuilderTests.swift; sourceTree = "<group>"; };
 		EEFFB5EF6C39829603712850 /* HostBackwardCompatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostBackwardCompatTests.swift; sourceTree = "<group>"; };
+		F724A49CFE343058E3BD79F4 /* PTYSessionMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTYSessionMenuTests.swift; sourceTree = "<group>"; };
 		F8A11A1E283D814F338C088D /* OSC7Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OSC7Tests.swift; sourceTree = "<group>"; };
 		F8D5BC5CE3351E46E132163A /* BHTerminalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BHTerminalTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -240,6 +242,7 @@
 				EEFFB5EF6C39829603712850 /* HostBackwardCompatTests.swift */,
 				13C1D4D21139E190A2A464EF /* KeychainServiceTests.swift */,
 				F8A11A1E283D814F338C088D /* OSC7Tests.swift */,
+				F724A49CFE343058E3BD79F4 /* PTYSessionMenuTests.swift */,
 				A632E03BD48A28C0CAE24036 /* SessionImportTests.swift */,
 				5907C3669A0F8B7B6801C804 /* SessionStoreTests.swift */,
 				D264103AF3FB8AFF518A18B5 /* SFTPProtocolClientTests.swift */,
@@ -436,6 +439,7 @@
 				5FC10AC6821070107990AE57 /* HostBackwardCompatTests.swift in Sources */,
 				53C43679EBBDC97290CF0357 /* KeychainServiceTests.swift in Sources */,
 				18984FE8DD8CE4554AFD5DF2 /* OSC7Tests.swift in Sources */,
+				3F0A338E1A9E7C0072FD4512 /* PTYSessionMenuTests.swift in Sources */,
 				889774B8062B1CB945FC7406 /* SFTPProtocolClientTests.swift in Sources */,
 				BC88BF5947B7F8CC444989ED /* SSHArgvBuilderTests.swift in Sources */,
 				93E4601019B54C49A9515EA6 /* SessionImportTests.swift in Sources */,

@@ -71,36 +71,32 @@ final class PTYSession: LocalProcessTerminalView {
     // MARK: - Right-click Copy / Paste / Select
 
     /// SwiftTerm's TerminalView already implements copy/paste/selectAll and
-    /// exposes `getSelection()` / `selectionActive`; it just doesn't provide a
-    /// context menu. NSView calls `menu(for:)` on right-click, so wire one up.
+    /// exposes `getSelection()`; it just doesn't provide a context menu. NSView
+    /// calls `menu(for:)` on right-click, so wire one up.
+    ///
+    /// autoenablesItems is turned OFF: SwiftTerm implements
+    /// `validateUserInterfaceItem`, which AppKit would call for these custom
+    /// items and — not recognising the selectors — disable them all. So enable
+    /// them ourselves.
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
-        addContextItem(menu, "Copy", #selector(contextCopy))
-        addContextItem(menu, "Paste", #selector(contextPaste))
+        menu.autoenablesItems = false
+        let hasSelection = !(getSelection()?.isEmpty ?? true)
+        let hasClipboardText = NSPasteboard.general.string(forType: .string)?.isEmpty == false
+
+        addContextItem(menu, "Copy", #selector(contextCopy), enabled: hasSelection)
+        addContextItem(menu, "Paste", #selector(contextPaste), enabled: hasClipboardText)
         menu.addItem(.separator())
-        addContextItem(menu, "Select All", #selector(contextSelectAll))
-        addContextItem(menu, "Copy All", #selector(contextCopyAll))
+        addContextItem(menu, "Select All", #selector(contextSelectAll), enabled: true)
+        addContextItem(menu, "Copy All", #selector(contextCopyAll), enabled: true)
         return menu
     }
 
-    private func addContextItem(_ menu: NSMenu, _ title: String, _ action: Selector) {
+    private func addContextItem(_ menu: NSMenu, _ title: String, _ action: Selector, enabled: Bool) {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
         item.target = self
+        item.isEnabled = enabled
         menu.addItem(item)
-    }
-
-    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        switch menuItem.action {
-        case #selector(contextCopy):
-            return selectionActive
-        case #selector(contextPaste):
-            return NSPasteboard.general.string(forType: .string) != nil
-        case #selector(contextSelectAll), #selector(contextCopyAll):
-            return true
-        default:
-            // Defer non-context items (e.g. the app's Edit menu) to SwiftTerm.
-            return validateUserInterfaceItem(menuItem)
-        }
     }
 
     @objc private func contextCopy() { copy(self) }
