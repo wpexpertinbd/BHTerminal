@@ -58,8 +58,11 @@ cp -R "$APP" "$PKGROOT/Applications/"
 
 PKGTMP=$(mktemp -d)
 mkdir -p "$PKGTMP/res"
+# --scripts adds a preinstall step that quits any running BHTerminal first, so
+# a reinstall replaces the live app instead of leaving the old version running.
 pkgbuild --root "$PKGROOT" --install-location / \
   --identifier com.biswashost.BHTerminal --version "$VERSION" \
+  --scripts packaging/pkg-scripts \
   --ownership recommended "$PKGTMP/component.pkg"
 
 # Branded Welcome + Conclusion (version substituted in from the templates).

@@ -1,0 +1,21 @@
+#!/bin/sh
+#
+# Runs (as root) BEFORE the new BHTerminal.app is written. Quits any running
+# copy so the reinstall actually replaces the live app — otherwise the old
+# version keeps running (incl. its menu-bar background instance) until the
+# user manually quits and relaunches.
+#
+# SIGTERM first so the app can shut down cleanly (close sessions, save state),
+# then SIGKILL as a fallback if it's still around after a few seconds.
+
+/usr/bin/killall -TERM BHTerminal 2>/dev/null || true
+
+i=0
+while [ "$i" -lt 5 ]; do
+    /usr/bin/pgrep -x BHTerminal >/dev/null 2>&1 || exit 0
+    sleep 1
+    i=$((i + 1))
+done
+
+/usr/bin/killall -KILL BHTerminal 2>/dev/null || true
+exit 0
