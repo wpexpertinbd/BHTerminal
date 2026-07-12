@@ -48,14 +48,42 @@ hdiutil create -volname "BHTerminal $VERSION" -srcfolder "$STAGE" \
   -ov -format UDZO "dist/BHTerminal-$VERSION.dmg"
 rm -rf "$STAGE"
 
-# ---------- PKG ----------
-STAGE=$(mktemp -d)
-cp -R "$APP" "$STAGE/"
-rm -f "dist/BHTerminal-$VERSION.pkg"
-pkgbuild --root "$STAGE" --install-location /Applications \
+# ---------- PKG (branded installer via productbuild) ----------
+# A plain pkgbuild has no Welcome/Conclusion screens — this wraps the payload
+# in a productbuild "distribution" so the installer shows branded BiswasHost
+# intro + finish pages (matching the BHServe / Bijoy installers).
+PKGROOT=$(mktemp -d)
+mkdir -p "$PKGROOT/Applications"
+cp -R "$APP" "$PKGROOT/Applications/"
+
+PKGTMP=$(mktemp -d)
+mkdir -p "$PKGTMP/res"
+pkgbuild --root "$PKGROOT" --install-location / \
   --identifier com.biswashost.BHTerminal --version "$VERSION" \
-  "dist/BHTerminal-$VERSION.pkg"
-rm -rf "$STAGE"
+  --ownership recommended "$PKGTMP/component.pkg"
+
+# Branded Welcome + Conclusion (version substituted in from the templates).
+sed "s/__VERSION__/$VERSION/g" packaging/welcome.html   > "$PKGTMP/res/welcome.html"
+sed "s/__VERSION__/$VERSION/g" packaging/conclusion.html > "$PKGTMP/res/conclusion.html"
+
+cat > "$PKGTMP/distribution.xml" <<XML
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="1">
+  <title>BHTerminal</title>
+  <welcome file="welcome.html" mime-type="text/html"/>
+  <conclusion file="conclusion.html" mime-type="text/html"/>
+  <volume-check><allowed-os-versions><os-version min="14.0"/></allowed-os-versions></volume-check>
+  <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>
+  <choices-outline><line choice="default"/></choices-outline>
+  <choice id="default"><pkg-ref id="com.biswashost.BHTerminal"/></choice>
+  <pkg-ref id="com.biswashost.BHTerminal" version="$VERSION">component.pkg</pkg-ref>
+</installer-gui-script>
+XML
+
+rm -f "dist/BHTerminal-$VERSION.pkg"
+productbuild --distribution "$PKGTMP/distribution.xml" \
+  --resources "$PKGTMP/res" --package-path "$PKGTMP" "dist/BHTerminal-$VERSION.pkg"
+rm -rf "$PKGROOT" "$PKGTMP"
 
 echo "==> Done:"
 ls -lh "dist/BHTerminal-$VERSION.dmg" "dist/BHTerminal-$VERSION.pkg"
