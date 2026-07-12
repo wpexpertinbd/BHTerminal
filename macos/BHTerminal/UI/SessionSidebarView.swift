@@ -172,7 +172,9 @@ struct SessionSidebarView: View {
         }
         .tag(host.id)
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) { onConnect(host) }
+        // simultaneousGesture (not onTapGesture) so single-click still reaches
+        // the List and highlights the row; double-click also connects.
+        .simultaneousGesture(TapGesture(count: 2).onEnded { onConnect(host) })
         .contextMenu {
             Button("Connect", systemImage: "bolt.fill") { onConnect(host) }
             Divider()
