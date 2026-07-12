@@ -19,10 +19,17 @@ import SwiftTerm
 ///     cwd-follow, and the SFTP pane stays fully usable by hand regardless.
 final class PTYSession: LocalProcessTerminalView {
     private(set) var host: Host?
-    private var storedPassword: String?
-    private var hasSentPassword = false
+    /// The Keychain secret to auto-fill at ssh's prompt: a password for
+    /// password auth, or a key passphrase for private-key auth.
+    private var authSecret: String?
+    /// Lowercased substring of the prompt that triggers the fill.
+    private var authNeedle = "password:"
+    /// How many times we may still fill. Password auth = 1; a passphrase can
+    /// be asked more than once (a jump host and the target each load the key),
+    /// so allow a few — capped so a wrong passphrase can't loop forever.
+    private var secretFillsRemaining = 0
     private var recentOutput: [UInt8] = []
-    private let promptScanWindow = 64
+    private let promptScanWindow = 128
 
     private var hasInjectedCwdHook = false
     private var cwdHookWorkItem: DispatchWorkItem?
@@ -45,8 +52,23 @@ final class PTYSession: LocalProcessTerminalView {
             return
         }
 
-        if host.authMethod == .password {
-            storedPassword = try? KeychainService.read(account: host.keychainAccount)
+        switch host.authMethod {
+        case .password:
+            if let password = try? KeychainService.read(account: host.keychainAccount), !password.isEmpty {
+                authSecret = password
+                authNeedle = "password:"
+                secretFillsRemaining = 1
+            }
+        case .privateKey:
+            // Auto-fill the saved key passphrase at ssh's "Enter passphrase
+            // for key '…':" prompt.
+            if let passphrase = try? KeychainService.read(account: host.passphraseAccount), !passphrase.isEmpty {
+                authSecret = passphrase
+                authNeedle = "passphrase for"
+                secretFillsRemaining = 3
+            }
+        case .agent:
+            break
         }
         startProcess(executable: executable, args: args)
     }
@@ -126,15 +148,16 @@ final class PTYSession: LocalProcessTerminalView {
     }
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
-        if !hasSentPassword, let password = storedPassword, !password.isEmpty {
+        if secretFillsRemaining > 0, let secret = authSecret {
             recentOutput.append(contentsOf: slice)
             if recentOutput.count > promptScanWindow {
                 recentOutput.removeFirst(recentOutput.count - promptScanWindow)
             }
             let tail = String(decoding: recentOutput, as: UTF8.self).lowercased()
-            if tail.contains("password:") {
-                hasSentPassword = true
-                process.send(data: ArraySlice(Array((password + "\r").utf8)))
+            if tail.contains(authNeedle) {
+                secretFillsRemaining -= 1
+                recentOutput.removeAll() // don't re-match the same prompt still in the window
+                process.send(data: ArraySlice(Array((secret + "\r").utf8)))
             }
         }
 
@@ -169,6 +192,11 @@ final class PTYSession: LocalProcessTerminalView {
     private func injectCwdHookIfSettled() {
         guard !hasInjectedCwdHook, let process, process.running else { return }
         hasInjectedCwdHook = true
+        // Output has settled into a real shell prompt → auth is done. Drop the
+        // secret from memory and stop watching for a prompt to fill.
+        authSecret = nil
+        secretFillsRemaining = 0
+        recentOutput = []
         process.send(data: ArraySlice(Array(PTYSession.cwdHookScript.utf8)))
     }
 
