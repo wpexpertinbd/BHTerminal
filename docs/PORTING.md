@@ -97,7 +97,15 @@ These are not optional; they're why BHTerminal is safe to hand your servers to.
    destination operand. A host named `-oProxyCommand=…` must never reach `ssh`.
 4. **Imports are untrusted.** Re-validate every hostname/username at import;
    clamp/strip imported names; size-cap the import file.
-5. **VNC clipboard sharing defaults off** (opt-in per host).
+5. **The remote SFTP server is untrusted.** If you parse the SFTP wire
+   protocol, treat every byte from the server as hostile: bound
+   server-declared packet lengths and array counts (a NAME reply can claim 4
+   billion entries), cap in-memory buffers / stream large files to disk, and
+   put a timeout on every request so a stalled server can't hang the app.
+6. **SSH control socket in a per-user 0700 directory**, never a world-writable
+   path like `/tmp` — the `%C` name is predictable and a shared-dir socket can
+   be squatted to MITM the multiplexed session.
+7. **VNC clipboard sharing defaults off** (opt-in per host).
 6. Ship with the platform's exploit-mitigation defaults (Hardened Runtime on
    macOS; equivalent on others).
 
