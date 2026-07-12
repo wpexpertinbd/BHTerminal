@@ -31,8 +31,9 @@ struct MainWindowView: View {
                 tabs: $tabs,
                 selectedTabID: $selectedTabID,
                 onCwdChange: { host, path in
-                    guard host.id == sftpConnection.connectedHost?.id else { return }
-                    Task { await sftpConnection.navigateToAbsolutePath(path) }
+                    // Also auto-(re)connects SFTP if its initial attempt lost the
+                    // race with the terminal's authentication.
+                    Task { await sftpConnection.terminalDidReportCwd(host: host, path: path) }
                 }
             )
             .navigationTitle(selectedTabTitle)

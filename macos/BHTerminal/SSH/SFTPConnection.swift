@@ -37,6 +37,12 @@ final class SFTPConnection {
     /// Latest cwd reported by the terminal (OSC 7), remembered even while
     /// not following, so toggling "Follow Terminal" on jumps there immediately.
     private var lastTerminalPath: String?
+    /// Remembered so retries (and the ↻ button) can rebuild the SFTP argv.
+    private var resolveJumpHost: (UUID) -> Host? = { _ in nil }
+
+    /// Whether the SFTP channel is actually open (vs. targeting a host but not
+    /// yet connected / failed).
+    var isConnected: Bool { client != nil }
 
     /// How long to keep retrying the SFTP subsystem while the terminal's
     /// master connection comes up (covers the user typing a passphrase / 2FA).
@@ -46,6 +52,7 @@ final class SFTPConnection {
     func connect(to host: Host, resolveJumpHost: @escaping (UUID) -> Host? = { _ in nil }) async {
         generation += 1
         let gen = generation
+        self.resolveJumpHost = resolveJumpHost
 
         await teardown()
         connectedHost = host
@@ -62,7 +69,6 @@ final class SFTPConnection {
             (executable, args) = try SSHArgvBuilder.buildSFTP(for: host, resolveJumpHost: resolveJumpHost)
         } catch {
             errorMessage = describeError(error)
-            connectedHost = nil
             return
         }
 
@@ -87,8 +93,9 @@ final class SFTPConnection {
         }
 
         guard gen == generation else { return }
+        // Keep connectedHost set so the pane shows which host failed and can
+        // auto-retry once the terminal confirms it's up (see terminalDidReportCwd).
         errorMessage = SFTPConnectionError.couldNotOpen.localizedDescription
-        connectedHost = nil
     }
 
     func disconnect() async {
@@ -103,7 +110,25 @@ final class SFTPConnection {
     }
 
     func refresh() async {
+        // If we lost/never had the connection, the ↻ button reconnects.
+        if client == nil {
+            if let host = connectedHost { await connect(to: host, resolveJumpHost: resolveJumpHost) }
+            return
+        }
         await load(path: currentPath, showLoading: true)
+    }
+
+    /// Called on the terminal's OSC 7 cwd report — a definitive signal that the
+    /// shared master connection is up. If we're targeting this host but the
+    /// initial connect lost the timing race, connect now; if already connected,
+    /// follow (when enabled).
+    func terminalDidReportCwd(host: Host, path: String) async {
+        guard connectedHost?.id == host.id else { return }
+        if client != nil {
+            await navigateToAbsolutePath(path)
+        } else if !isLoading {
+            await connect(to: host, resolveJumpHost: resolveJumpHost)
+        }
     }
 
     func navigate(to entry: SFTPEntry) async {
