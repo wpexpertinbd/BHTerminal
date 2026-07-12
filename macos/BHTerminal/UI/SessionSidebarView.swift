@@ -6,6 +6,9 @@ import SwiftUI
 struct SessionSidebarView: View {
     var store: SessionStore
     var tunnelManager: TunnelManager
+    /// Hosts with a live connection (open terminal/VNC tab) — shown as a green
+    /// status dot; idle hosts keep their colour tag (or grey).
+    var connectedHostIDs: Set<UUID> = []
     var onConnect: (Host) -> Void = { _ in }
 
     @State private var searchText = ""
@@ -147,10 +150,12 @@ struct SessionSidebarView: View {
     }
 
     private func hostRow(_ host: Host) -> some View {
-        HStack(spacing: 8) {
+        let connected = connectedHostIDs.contains(host.id)
+        return HStack(spacing: 8) {
             Circle()
-                .fill(colorForTag(host.colorTag))
+                .fill(connected ? Color.green : colorForTag(host.colorTag))
                 .frame(width: 8, height: 8)
+                .help(connected ? "Connected" : "Not connected")
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
                     if host.connectionType == .vnc {

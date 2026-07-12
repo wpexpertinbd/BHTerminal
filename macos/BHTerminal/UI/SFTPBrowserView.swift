@@ -34,6 +34,8 @@ struct SFTPBrowserView: View {
                 pathBar
                 Divider()
                 fileList
+                Divider()
+                followBar
             }
         }
         .overlay(alignment: .top) {
@@ -141,10 +143,33 @@ struct SFTPBrowserView: View {
             if connection.isLoading {
                 ProgressView().controlSize(.small)
             }
+
+            Button { Task { await connection.disconnect() } } label: {
+                Image(systemName: "eject")
+            }
+            .help("Disconnect SFTP")
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, 8)
         .frame(height: 32)
+        .background(.bar)
+    }
+
+    /// Bottom bar: opt-in cwd-follow.
+    private var followBar: some View {
+        HStack {
+            Toggle(isOn: Binding(
+                get: { connection.followTerminal },
+                set: { connection.setFollowTerminal($0) }
+            )) {
+                Text("Follow Terminal").font(.caption)
+            }
+            .toggleStyle(.checkbox)
+            .help("Keep this browser in the same folder the terminal is currently in")
+            Spacer()
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 28)
         .background(.bar)
     }
 

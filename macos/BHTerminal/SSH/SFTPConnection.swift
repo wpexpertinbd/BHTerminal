@@ -28,9 +28,15 @@ final class SFTPConnection {
     /// Shown while waiting for the terminal to finish authenticating so the
     /// shared connection exists (e.g. the user is typing a key passphrase).
     private(set) var statusMessage: String?
+    /// When on, the browser jumps to the terminal's current directory as you
+    /// `cd` around. Off by default (opt-in via the footer checkbox).
+    private(set) var followTerminal = false
 
     private var client: SFTPProtocolClient?
     private var generation = 0
+    /// Latest cwd reported by the terminal (OSC 7), remembered even while
+    /// not following, so toggling "Follow Terminal" on jumps there immediately.
+    private var lastTerminalPath: String?
 
     /// How long to keep retrying the SFTP subsystem while the terminal's
     /// master connection comes up (covers the user typing a passphrase / 2FA).
@@ -46,6 +52,7 @@ final class SFTPConnection {
         entries = []
         errorMessage = nil
         currentPath = "."
+        lastTerminalPath = nil
         isLoading = true
         statusMessage = "Connecting…"
         defer { if gen == generation { isLoading = false; statusMessage = nil } }
@@ -90,6 +97,7 @@ final class SFTPConnection {
         connectedHost = nil
         entries = []
         currentPath = "."
+        lastTerminalPath = nil
         errorMessage = nil
         statusMessage = nil
     }
@@ -109,9 +117,20 @@ final class SFTPConnection {
     }
 
     /// Driven by the terminal's OSC 7 cwd-follow — `path` is already absolute.
+    /// Remembers the path always, but only navigates when "Follow Terminal" is on.
     func navigateToAbsolutePath(_ path: String) async {
-        guard client != nil, path != currentPath else { return }
+        lastTerminalPath = path
+        guard followTerminal, client != nil, path != currentPath else { return }
         await load(path: path, showLoading: false)
+    }
+
+    /// Toggled by the browser's "Follow Terminal" checkbox. Turning it on jumps
+    /// to the terminal's last-known directory right away.
+    func setFollowTerminal(_ on: Bool) {
+        followTerminal = on
+        if on, let path = lastTerminalPath, path != currentPath, client != nil {
+            Task { await load(path: path, showLoading: false) }
+        }
     }
 
     func createDirectory(name: String) async {

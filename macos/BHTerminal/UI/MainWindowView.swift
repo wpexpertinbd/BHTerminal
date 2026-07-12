@@ -17,7 +17,8 @@ struct MainWindowView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SessionSidebarView(store: store, tunnelManager: tunnelManager, onConnect: connect)
+            SessionSidebarView(store: store, tunnelManager: tunnelManager,
+                               connectedHostIDs: connectedHostIDs, onConnect: connect)
                 .navigationTitle("Sessions")
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
         } content: {
@@ -38,6 +39,30 @@ struct MainWindowView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .background(WindowConfigurator())
+        // When the last terminal tab for the SFTP's host closes, close SFTP too
+        // — it can't outlive the connection it was sharing anyway.
+        .onChange(of: terminalHostIDs) { _, ids in
+            if let host = sftpConnection.connectedHost, !ids.contains(host.id) {
+                Task { await sftpConnection.disconnect() }
+            }
+        }
+    }
+
+    /// Hosts with an open terminal tab (SFTP pairs with these).
+    private var terminalHostIDs: Set<UUID> {
+        Set(tabs.flatMap { tab -> [UUID] in
+            if case .terminal(let t) = tab { return t.panes.map(\.host.id) }
+            return []
+        })
+    }
+
+    /// Every connected host (terminal + VNC) — drives the sidebar status dot.
+    private var connectedHostIDs: Set<UUID> {
+        var ids = terminalHostIDs
+        for tab in tabs {
+            if case .vnc(let v) = tab { ids.insert(v.host.id) }
+        }
+        return ids
     }
 
     private var selectedTabTitle: String {
