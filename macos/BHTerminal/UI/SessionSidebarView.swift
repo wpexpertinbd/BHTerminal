@@ -78,6 +78,15 @@ struct SessionSidebarView: View {
             }
             .listStyle(.sidebar)
             .searchable(text: $searchText, placement: .sidebar, prompt: "Quick connect / filter")
+            // Right-click menus are per-row (folderRow / hostRow). This modifier
+            // is here purely for its primaryAction: double-click a host to
+            // connect, while single-click still selects/highlights the row.
+            .contextMenu(forSelectionType: UUID.self) { _ in
+            } primaryAction: { ids in
+                if let id = ids.first, let host = store.hosts.first(where: { $0.id == id }) {
+                    onConnect(host)
+                }
+            }
         }
         .toolbar {
             ToolbarItem {
@@ -172,9 +181,9 @@ struct SessionSidebarView: View {
         }
         .tag(host.id)
         .contentShape(Rectangle())
-        // simultaneousGesture (not onTapGesture) so single-click still reaches
-        // the List and highlights the row; double-click also connects.
-        .simultaneousGesture(TapGesture(count: 2).onEnded { onConnect(host) })
+        // No tap gesture here — one would swallow the single click and kill the
+        // List's selection highlight (so you couldn't tell what you'd picked).
+        // Double-click-to-connect is handled by the List's primaryAction below.
         .contextMenu {
             Button("Connect", systemImage: "bolt.fill") { onConnect(host) }
             Divider()

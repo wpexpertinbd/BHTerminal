@@ -118,10 +118,18 @@ final class SFTPConnection {
         await load(path: currentPath, showLoading: true)
     }
 
-    /// Called on the terminal's OSC 7 cwd report — a definitive signal that the
-    /// shared master connection is up. If we're targeting this host but the
-    /// initial connect lost the timing race, connect now; if already connected,
-    /// follow (when enabled).
+    /// Called (silently, no shell hook needed) once the terminal's login has
+    /// settled into a real prompt — a definitive signal that the shared master
+    /// connection is up. If we're targeting this host but the initial connect
+    /// lost the timing race, connect now.
+    func terminalDidBecomeReady(host: Host) async {
+        guard connectedHost?.id == host.id, client == nil, !isLoading else { return }
+        await connect(to: host, resolveJumpHost: resolveJumpHost)
+    }
+
+    /// Called on the terminal's OSC 7 cwd report (only emitted while "Follow
+    /// Terminal" is on). If already connected, follow; if the initial connect
+    /// lost the race, connect now.
     func terminalDidReportCwd(host: Host, path: String) async {
         guard connectedHost?.id == host.id else { return }
         if client != nil {
@@ -153,6 +161,9 @@ final class SFTPConnection {
     /// to the terminal's last-known directory right away.
     func setFollowTerminal(_ on: Bool) {
         followTerminal = on
+        // Turning this on is what makes the terminal install its cwd-reporting
+        // shell hook (kept off by default so login output stays clean).
+        CwdFollowCenter.shared.setEnabled(on)
         if on, let path = lastTerminalPath, path != currentPath, client != nil {
             Task { await load(path: path, showLoading: false) }
         }

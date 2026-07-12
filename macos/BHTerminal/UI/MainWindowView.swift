@@ -31,9 +31,13 @@ struct MainWindowView: View {
                 tabs: $tabs,
                 selectedTabID: $selectedTabID,
                 onCwdChange: { host, path in
-                    // Also auto-(re)connects SFTP if its initial attempt lost the
-                    // race with the terminal's authentication.
                     Task { await sftpConnection.terminalDidReportCwd(host: host, path: path) }
+                },
+                onReady: { host in
+                    // Silent signal that the shared SSH connection is up — lets
+                    // SFTP auto-(re)connect if its initial attempt lost the race
+                    // with the terminal's authentication (no shell hook needed).
+                    Task { await sftpConnection.terminalDidBecomeReady(host: host) }
                 }
             )
             .navigationTitle(selectedTabTitle)

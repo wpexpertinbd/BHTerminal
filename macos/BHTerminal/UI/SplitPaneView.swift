@@ -63,6 +63,9 @@ struct SplitPaneView: NSViewRepresentable {
     var commandDispatch: PaneCommandDispatch?
     var onPaneExit: (UUID) -> Void = { _ in }
     var onCwdChange: (UUID, String) -> Void = { _, _ in }
+    /// Fires (once per pane) when its login settles into a shell prompt — the
+    /// silent signal the SFTP pane uses to auto-connect.
+    var onReady: (UUID) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -106,6 +109,10 @@ struct SplitPaneView: NSViewRepresentable {
         for pane in panes where context.coordinator.sessions[pane.id] == nil {
             let session = PTYSession(frame: .zero)
             session.processDelegate = context.coordinator
+            let paneID = pane.id
+            session.onReady = { [weak coordinator = context.coordinator] in
+                coordinator?.owner?.onReady(paneID)
+            }
             session.connect(to: pane.host) { jumpID in
                 store.hosts.first { $0.id == jumpID }
             }

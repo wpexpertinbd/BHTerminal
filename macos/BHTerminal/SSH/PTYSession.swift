@@ -31,6 +31,12 @@ final class PTYSession: LocalProcessTerminalView {
     private var recentOutput: [UInt8] = []
     private let promptScanWindow = 128
 
+    /// Output has settled into a real shell prompt → login/auth finished. This
+    /// is the silent signal that drives the SFTP pane's auto-connect (it needs
+    /// no shell hook, so it fires regardless of "Follow Terminal").
+    private var hasSignaledReady = false
+    var onReady: (() -> Void)?
+
     private var hasInjectedCwdHook = false
     private var cwdHookWorkItem: DispatchWorkItem?
 
@@ -39,6 +45,11 @@ final class PTYSession: LocalProcessTerminalView {
     func connect(to host: Host, resolveJumpHost: @escaping (UUID) -> Host? = { _ in nil }) {
         self.host = host
         applyAppearance()
+        // Inject the cwd hook late if the user turns on "Follow Terminal" after
+        // this terminal is already connected.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(followTerminalEnabled),
+            name: CwdFollowCenter.didEnable, object: nil)
 
         let executable: String
         let args: [String]
@@ -165,38 +176,55 @@ final class PTYSession: LocalProcessTerminalView {
 
         super.dataReceived(slice: slice)
 
-        if !hasInjectedCwdHook {
+        if !hasSignaledReady {
             DispatchQueue.main.async { [weak self] in
-                self?.scheduleCwdHookInjection()
+                self?.scheduleSettleCheck()
             }
         }
     }
 
     deinit {
+        NotificationCenter.default.removeObserver(self)
         logFileHandle?.closeFile()
     }
 
     /// Debounced on the LAST byte received — cancels and reschedules on
-    /// every call, so the hook only fires once output has actually gone
-    /// quiet (a real prompt, not mid-banner/mid-password-exchange output).
-    private func scheduleCwdHookInjection() {
-        guard !hasInjectedCwdHook else { return }
+    /// every call, so it only fires once output has actually gone quiet (a
+    /// real prompt, not mid-banner/mid-password-exchange output).
+    private func scheduleSettleCheck() {
+        guard !hasSignaledReady else { return }
         cwdHookWorkItem?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
-            self?.injectCwdHookIfSettled()
+            self?.handleOutputSettled()
         }
         cwdHookWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: workItem)
     }
 
-    private func injectCwdHookIfSettled() {
-        guard !hasInjectedCwdHook, let process, process.running else { return }
-        hasInjectedCwdHook = true
-        // Output has settled into a real shell prompt → auth is done. Drop the
-        // secret from memory and stop watching for a prompt to fill.
+    private func handleOutputSettled() {
+        guard !hasSignaledReady, let process, process.running else { return }
+        hasSignaledReady = true
+        // A real shell prompt is showing → auth is done. Drop the secret from
+        // memory and stop watching for a prompt to fill.
         authSecret = nil
         secretFillsRemaining = 0
         recentOutput = []
+        // Tell the SFTP pane the shared connection is up (silent — no hook).
+        onReady?()
+        // Install the cwd-reporting hook only if the user is following the
+        // terminal; otherwise skip it so login stays clean (no echoed wall of
+        // shell). If they toggle following on later, followTerminalEnabled
+        // installs it then.
+        maybeInjectCwdHook()
+    }
+
+    @objc private func followTerminalEnabled() { maybeInjectCwdHook() }
+
+    private func maybeInjectCwdHook() {
+        guard hasSignaledReady, !hasInjectedCwdHook,
+              CwdFollowCenter.shared.isEnabled,
+              let process, process.running else { return }
+        hasInjectedCwdHook = true
         process.send(data: ArraySlice(Array(PTYSession.cwdHookScript.utf8)))
     }
 

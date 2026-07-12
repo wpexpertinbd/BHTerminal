@@ -57,6 +57,7 @@ struct TerminalContainerView: View {
     @Binding var tabs: [WorkspaceTab]
     @Binding var selectedTabID: UUID?
     var onCwdChange: (Host, String) -> Void = { _, _ in }
+    var onReady: (Host) -> Void = { _ in }
 
     @State private var broadcastEnabled = false
     @State private var commandDispatch: PaneCommandDispatch?
@@ -107,6 +108,11 @@ struct TerminalContainerView: View {
                 onCwdChange: { paneID, path in
                     if let host = terminalTab.panes.first(where: { $0.id == paneID })?.host {
                         onCwdChange(host, path)
+                    }
+                },
+                onReady: { paneID in
+                    if let host = terminalTab.panes.first(where: { $0.id == paneID })?.host {
+                        onReady(host)
                     }
                 }
             )
