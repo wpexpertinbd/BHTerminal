@@ -76,7 +76,7 @@ This project is free and open-source. If it made your server work easier, you ca
 **buy me a coffee** — it genuinely helps me keep building and maintaining free
 tools like this. 🙏
 
-- **bKash** (Personal · *Send Money*): **`01710378396`**
+- **bKash/Nagad** (Personal · *Send Money*): **`01710378396`**
 
 ধন্যবাদ! / Thank you!
 
