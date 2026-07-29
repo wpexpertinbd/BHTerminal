@@ -19,6 +19,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
+    /// Close every live session on quit. The sessions are owned by
+    /// TerminalSessionRegistry (app lifetime), so nothing else tears them down —
+    /// and this also shuts down their shared ssh ControlMasters, so the next
+    /// launch never inherits a stale one.
+    func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            TerminalSessionRegistry.shared.terminateAll()
+        }
+    }
+
     /// Clicking the Dock icon (when it's showing) or re-launching brings the
     /// window back and restores regular (Dock-visible) mode.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {

@@ -12,6 +12,7 @@
 		0F0D65A47988B63742EFB415 /* SessionTreeItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EF971029C79893A95B2807F /* SessionTreeItem.swift */; };
 		108102A94F4AE827DA03B658 /* TunnelRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C581EB68F1621BFF51FF31C /* TunnelRule.swift */; };
 		18984FE8DD8CE4554AFD5DF2 /* OSC7Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8A11A1E283D814F338C088D /* OSC7Tests.swift */; };
+		205E4008AA98E66AF624BFE1 /* WorkspaceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6462B81C835F24911564F8C /* WorkspaceModel.swift */; };
 		269E7BE490CA9F626FD31493 /* BHTerminalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C82D151204B7B999D3C92A5 /* BHTerminalApp.swift */; };
 		2D78DA46759E0F470C29A578 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AD69599D8DDCD5F13DDA483 /* AppTheme.swift */; };
 		339991C514E317889F3D6FF0 /* SFTPEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F42C99D948D0CFFA1DCFA0 /* SFTPEntry.swift */; };
@@ -58,6 +59,7 @@
 		D8BE3720FCF0DC076A871492 /* TunnelArgvBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0CE6DACEF067A630E3AA6F0 /* TunnelArgvBuilderTests.swift */; };
 		D9AB14F77F92246E3D4EE370 /* HostEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3C94C6F97EA919E295274 /* HostEditorView.swift */; };
 		DCD7510A367AB7D9BF94BD86 /* TunnelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 447021535C27DD401EDA45BB /* TunnelManager.swift */; };
+		DDC26469562B1BCB091DBF5A /* TerminalSessionRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F66B744C28A47D660D50937 /* TerminalSessionRegistry.swift */; };
 		DDE2D8244CAB1CF881B9AAE9 /* SessionSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D53A696D70413EF1FF2B4685 /* SessionSidebarView.swift */; };
 		FB0F340C391B1E13955E0D1C /* MobaXtermPasswordsImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4188080326D12E3488A73512 /* MobaXtermPasswordsImporter.swift */; };
 /* End PBXBuildFile section */
@@ -110,6 +112,7 @@
 		5AE561171541646A349D480F /* SFTPConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SFTPConnection.swift; sourceTree = "<group>"; };
 		5BC2C3D811911BD82CB1C7FF /* SSHSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHSafety.swift; sourceTree = "<group>"; };
 		5C82D151204B7B999D3C92A5 /* BHTerminalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BHTerminalApp.swift; sourceTree = "<group>"; };
+		5F66B744C28A47D660D50937 /* TerminalSessionRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSessionRegistry.swift; sourceTree = "<group>"; };
 		65F1224F0B9822AC4F40AA0F /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
 		67F42C99D948D0CFFA1DCFA0 /* SFTPEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SFTPEntry.swift; sourceTree = "<group>"; };
 		6BDB04F1BC9A053D2C668D4B /* VNCPaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VNCPaneView.swift; sourceTree = "<group>"; };
@@ -138,6 +141,7 @@
 		E0CE6DACEF067A630E3AA6F0 /* TunnelArgvBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelArgvBuilderTests.swift; sourceTree = "<group>"; };
 		EEFFB5EF6C39829603712850 /* HostBackwardCompatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostBackwardCompatTests.swift; sourceTree = "<group>"; };
 		F1A8BE7197CBC12F725B7D51 /* CwdFollowCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CwdFollowCenter.swift; sourceTree = "<group>"; };
+		F6462B81C835F24911564F8C /* WorkspaceModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceModel.swift; sourceTree = "<group>"; };
 		F724A49CFE343058E3BD79F4 /* PTYSessionMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTYSessionMenuTests.swift; sourceTree = "<group>"; };
 		F8A11A1E283D814F338C088D /* OSC7Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OSC7Tests.swift; sourceTree = "<group>"; };
 		F8D5BC5CE3351E46E132163A /* BHTerminalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BHTerminalTests.swift; sourceTree = "<group>"; };
@@ -185,6 +189,7 @@
 				245290FE53435B80EF4456E3 /* PTYSession.swift */,
 				5AE561171541646A349D480F /* SFTPConnection.swift */,
 				0C2914B89C42B1E2260AAF18 /* SFTPProtocolClient.swift */,
+				5F66B744C28A47D660D50937 /* TerminalSessionRegistry.swift */,
 				447021535C27DD401EDA45BB /* TunnelManager.swift */,
 				A7C1753ED158FB1FF88829F3 /* VNCSession.swift */,
 			);
@@ -292,6 +297,7 @@
 				4212F130872148EFEB10E19E /* TextPromptSheet.swift */,
 				B5F4E6B506526BBDBD66F922 /* TunnelManagerView.swift */,
 				6BDB04F1BC9A053D2C668D4B /* VNCPaneView.swift */,
+				F6462B81C835F24911564F8C /* WorkspaceModel.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -425,6 +431,7 @@
 				6E52B22ECE4719D61C779796 /* SnippetManagerView.swift in Sources */,
 				71A30963BF449FFF7AEF23C8 /* SplitPaneView.swift in Sources */,
 				3771208B8D8FE7954BBC1F05 /* TerminalContainerView.swift in Sources */,
+				DDC26469562B1BCB091DBF5A /* TerminalSessionRegistry.swift in Sources */,
 				8D6C7D3F0B6C52121D5F0E17 /* TextPromptSheet.swift in Sources */,
 				5C84127256863DEB971AE001 /* TunnelArgvBuilder.swift in Sources */,
 				DCD7510A367AB7D9BF94BD86 /* TunnelManager.swift in Sources */,
@@ -432,6 +439,7 @@
 				108102A94F4AE827DA03B658 /* TunnelRule.swift in Sources */,
 				6AFF0156B58A4092CC61CCAB /* VNCPaneView.swift in Sources */,
 				B232C05A699E4DE85B719716 /* VNCSession.swift in Sources */,
+				205E4008AA98E66AF624BFE1 /* WorkspaceModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -547,7 +555,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.biswashost.BHTerminal;
 				PRODUCT_NAME = BHTerminal;
 				SDKROOT = macosx;
@@ -653,7 +661,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.biswashost.BHTerminal;
 				PRODUCT_NAME = BHTerminal;
 				SDKROOT = macosx;

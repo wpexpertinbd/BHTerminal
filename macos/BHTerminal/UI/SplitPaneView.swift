@@ -26,7 +26,7 @@ struct PaneCommandDispatch: Equatable {
 /// NSSplitView's own layout is untouched; only the session inside opts
 /// into constraints). Background matches the session's own resolved theme
 /// color so the margin doesn't read as a mismatched border.
-private final class PaddedTerminalContainer: NSView {
+final class PaddedTerminalContainer: NSView {
     static let padding: CGFloat = 8
 
     init(session: PTYSession) {
@@ -50,18 +50,25 @@ private final class PaddedTerminalContainer: NSView {
 }
 
 /// Wraps an NSSplitView whose arranged subviews are PTYSession instances,
-/// one per TerminalTabPane. The Coordinator caches sessions by pane id so
-/// that unrelated SwiftUI re-renders (e.g. sidebar edits elsewhere in the
-/// window) never tear down and recreate a live SSH connection — a pane's
-/// PTYSession is only created once and only destroyed when its id actually
-/// leaves the `panes` array.
+/// one per TerminalTabPane.
+///
+/// The sessions themselves are owned by TerminalSessionRegistry (app
+/// lifetime), NOT by this view — SwiftUI tears NSViewRepresentables down
+/// whenever it likes, and this one used to kill the tab's ssh processes when
+/// it did. This view only borrows the live sessions and arranges them.
 struct SplitPaneView: NSViewRepresentable {
     let panes: [TerminalTabPane]
     let axis: Axis
     let store: SessionStore
     var broadcastEnabled: Bool = false
     var commandDispatch: PaneCommandDispatch?
-    var onPaneExit: (UUID) -> Void = { _ in }
+    /// False for background tabs — they stay connected but hidden (and can't
+    /// steal keyboard focus from the visible tab).
+    var isActive: Bool = true
+    /// Changes when a pane reconnects, so this view picks up the new session's
+    /// container view.
+    var reconnectToken: Int = 0
+    var onPaneExit: (UUID, Int32?) -> Void = { _, _ in }
     var onCwdChange: (UUID, String) -> Void = { _, _ in }
     /// Fires (once per pane) when its login settles into a shell prompt — the
     /// silent signal the SFTP pane uses to auto-connect.
@@ -71,18 +78,12 @@ struct SplitPaneView: NSViewRepresentable {
         Coordinator()
     }
 
-    /// Without this, closing a tab or switching away from it (both of
-    /// which tear down this NSViewRepresentable via its `.id()` changing,
-    /// never calling updateNSView again) would leak the underlying `ssh`
-    /// processes — LocalProcess's own deinit only cancels its exit-status
-    /// monitor, it does NOT send SIGTERM (only `.terminate()` does; see
-    /// SwiftTerm's LocalProcess.swift). updateNSView's per-pane diffing
-    /// only catches closing ONE split among several while the tab stays
-    /// open; this catches the tab actually going away.
+    /// Deliberately does NOT terminate anything: the registry owns the ssh
+    /// processes so that switching tabs (which tears this view down) leaves
+    /// every session connected. Panes/tabs are terminated explicitly by
+    /// TerminalContainerView when the user actually closes them.
     static func dismantleNSView(_ nsView: NSSplitView, coordinator: Coordinator) {
-        for session in coordinator.sessions.values {
-            session.terminate()
-        }
+        coordinator.removeKeyMonitor()
     }
 
     func makeNSView(context: Context) -> NSSplitView {
@@ -98,32 +99,49 @@ struct SplitPaneView: NSViewRepresentable {
         context.coordinator.owner = self
         splitView.isVertical = (axis == .horizontal)
 
-        let currentIDs = Set(panes.map(\.id))
-        for (paneID, session) in context.coordinator.sessions where !currentIDs.contains(paneID) {
-            session.terminate()
-            context.coordinator.sessions.removeValue(forKey: paneID)
-            context.coordinator.paneIDBySession.removeValue(forKey: ObjectIdentifier(session))
-            context.coordinator.containers.removeValue(forKey: paneID)
-        }
+        let registry = TerminalSessionRegistry.shared
+        let coordinator = context.coordinator
+        coordinator.sessions.removeAll()
+        coordinator.paneIDBySession.removeAll()
 
-        for pane in panes where context.coordinator.sessions[pane.id] == nil {
-            let session = PTYSession(frame: .zero)
-            session.processDelegate = context.coordinator
+        var orderedContainers: [NSView] = []
+        for pane in panes {
             let paneID = pane.id
-            session.onReady = { [weak coordinator = context.coordinator] in
-                coordinator?.owner?.onReady(paneID)
-            }
-            session.connect(to: pane.host) { jumpID in
+            let session = registry.session(for: paneID, host: pane.host) { jumpID in
                 store.hosts.first { $0.id == jumpID }
             }
-            context.coordinator.sessions[pane.id] = session
-            context.coordinator.paneIDBySession[ObjectIdentifier(session)] = pane.id
-            context.coordinator.containers[pane.id] = PaddedTerminalContainer(session: session)
+            // Re-point the callbacks at the current coordinator: this view (and
+            // its coordinator) can be rebuilt while the session lives on.
+            session.processDelegate = coordinator
+            session.onReady = { [weak coordinator] in
+                coordinator?.owner?.onReady(paneID)
+            }
+            coordinator.sessions[paneID] = session
+            coordinator.paneIDBySession[ObjectIdentifier(session)] = paneID
+            if let container = registry.container(for: paneID) {
+                orderedContainers.append(container)
+            }
         }
 
-        let orderedContainers: [NSView] = panes.compactMap { context.coordinator.containers[$0.id] }
-        splitView.subviews = orderedContainers
-        splitView.adjustSubviews()
+        // Only re-arrange when the set actually changed — reassigning subviews
+        // on every SwiftUI re-render would thrash NSSplitView's layout.
+        if splitView.arrangedSubviews != orderedContainers {
+            splitView.subviews = orderedContainers
+            splitView.adjustSubviews()
+        }
+
+        // Background tabs stay live but hidden; hiding also makes AppKit give
+        // up first-responder status so typing can't leak into a hidden tab.
+        splitView.isHidden = !isActive
+        if isActive && !coordinator.wasActive {
+            let firstSession = panes.first.flatMap { coordinator.sessions[$0.id] }
+            DispatchQueue.main.async {
+                if let firstSession, let window = firstSession.window {
+                    window.makeFirstResponder(firstSession)
+                }
+            }
+        }
+        coordinator.wasActive = isActive
 
         if let dispatch = commandDispatch, context.coordinator.lastCommandID != dispatch.id {
             context.coordinator.lastCommandID = dispatch.id
@@ -139,10 +157,12 @@ struct SplitPaneView: NSViewRepresentable {
 
     final class Coordinator: NSObject, LocalProcessTerminalViewDelegate {
         var owner: SplitPaneView?
+        /// Borrowed from TerminalSessionRegistry (which owns them) — refreshed
+        /// on every updateNSView. Never terminated from here.
         var sessions: [UUID: PTYSession] = [:]
-        var containers: [UUID: NSView] = [:]
         var paneIDBySession: [ObjectIdentifier: UUID] = [:]
         var lastCommandID: UUID?
+        var wasActive = false
         private var keyMonitor: Any?
 
         /// The pane that should receive a dispatched snippet/logging
@@ -179,6 +199,13 @@ struct SplitPaneView: NSViewRepresentable {
             }
         }
 
+        func removeKeyMonitor() {
+            if let keyMonitor {
+                NSEvent.removeMonitor(keyMonitor)
+                self.keyMonitor = nil
+            }
+        }
+
         deinit {
             if let keyMonitor {
                 NSEvent.removeMonitor(keyMonitor)
@@ -205,7 +232,7 @@ struct SplitPaneView: NSViewRepresentable {
                   let paneID = paneIDBySession[ObjectIdentifier(session)] else { return }
             let callback = owner?.onPaneExit
             DispatchQueue.main.async {
-                callback?(paneID)
+                callback?(paneID, exitCode)
             }
         }
     }

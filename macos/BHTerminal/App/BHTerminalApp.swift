@@ -5,15 +5,20 @@ struct BHTerminalApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     // Owned at App scope so they outlive the window: closing to the menu bar
-    // keeps saved sessions and running tunnels intact.
+    // keeps saved sessions, running tunnels, open session tabs and the SFTP
+    // connection intact (and stops live ssh sessions from being orphaned when
+    // the window's views are destroyed).
     @State private var store = SessionStore()
     @State private var tunnelManager = TunnelManager()
+    @State private var workspace = WorkspaceModel()
+    @State private var sftpConnection = SFTPConnection()
 
     var body: some Scene {
         // A single main window (id "main") — closing it drops the app to the
         // menu bar; "Open BHTerminal" re-opens this exact window.
         Window("BHTerminal", id: "main") {
-            MainWindowView(store: store, tunnelManager: tunnelManager)
+            MainWindowView(store: store, tunnelManager: tunnelManager,
+                           workspace: workspace, sftpConnection: sftpConnection)
         }
         .defaultSize(width: 1280, height: 800)
         .windowToolbarStyle(.unified)

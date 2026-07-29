@@ -42,6 +42,13 @@ final class PTYSession: LocalProcessTerminalView {
 
     private var logFileHandle: FileHandle?
 
+    /// Whether this pane's ssh is still alive (false once it exits — e.g. a
+    /// dropped network or a logout).
+    var isRunning: Bool {
+        guard let process else { return false }
+        return process.running
+    }
+
     func connect(to host: Host, resolveJumpHost: @escaping (UUID) -> Host? = { _ in nil }) {
         self.host = host
         applyAppearance()

@@ -47,7 +47,16 @@ enum SSHArgvBuilder {
 
     /// port / key / jump options common to both the terminal and SFTP argv.
     private static func connectionOptions(for host: Host, resolveJumpHost: (UUID) -> Host?) -> [String] {
-        var args: [String] = []
+        // Keepalives are what let a dropped network actually END the session
+        // instead of wedging it. Without them the ControlMaster process
+        // survives with a dead TCP connection (ControlPersist keeps it around),
+        // and every later session — including a manual reconnect — multiplexes
+        // onto that corpse and hangs until the kernel's TCP timeout. ssh now
+        // notices within ~45s and exits, so reconnects work.
+        var args: [String] = ["-o", "ServerAliveInterval=15",
+                              "-o", "ServerAliveCountMax=3",
+                              "-o", "TCPKeepAlive=yes",
+                              "-o", "ConnectTimeout=20"]
         if host.port != 22 {
             args += ["-p", String(host.port)]
         }
@@ -83,6 +92,39 @@ enum SSHArgvBuilder {
         try? fm.setAttributes([.posixPermissions: 0o700],
                               ofItemAtPath: (NSHomeDirectory() as NSString).appendingPathComponent(".bhterminal"))
         return (dir as NSString).appendingPathComponent("%C")
+    }
+
+    /// Force-closes the shared connection for a host (`ssh -O exit`), so the
+    /// next connect builds a brand-new one.
+    ///
+    /// A user-initiated reconnect must not reuse the existing master: after a
+    /// network drop the master can still be alive locally (its socket answers,
+    /// so `-O check` passes) while its TCP connection is dead, which is exactly
+    /// why "reconnect" used to do nothing until the app was restarted. Callers
+    /// must first ensure no other live pane is sharing this host's connection.
+    /// Best-effort and synchronous-but-brief; failure just means no master.
+    static func terminateControlMaster(for host: Host, resolveJumpHost: (UUID) -> Host? = { _ in nil }) {
+        guard (try? SSHSafety.validate(host, resolveJumpHost: resolveJumpHost)) != nil else { return }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+        process.arguments = ["-o", "ControlPath=\(controlPath)",
+                             "-O", "exit", "--", destination(for: host)]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            // `-O exit` only talks to the local control socket (no network), so
+            // it returns in milliseconds — or fails instantly when there's no
+            // master. The cap is purely so a wedged socket can't stall the
+            // Reconnect click.
+            let deadline = Date().addingTimeInterval(2)
+            while process.isRunning && Date() < deadline {
+                usleep(20_000)
+            }
+            if process.isRunning { process.terminate() }
+        } catch {
+            // No ssh / nothing to close — the fresh connect will handle it.
+        }
     }
 
     /// Shared with TunnelArgvBuilder — the -J embedded-port spec format.

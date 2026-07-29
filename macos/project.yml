@@ -44,7 +44,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.biswashost.BHTerminal
         PRODUCT_NAME: BHTerminal
-        MARKETING_VERSION: "1.1.1"
+        MARKETING_VERSION: "1.2.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5"
         SWIFT_STRICT_CONCURRENCY: minimal

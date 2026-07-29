@@ -9,14 +9,19 @@ struct MainWindowView: View {
     /// saved sessions or kill running tunnels.
     let store: SessionStore
     let tunnelManager: TunnelManager
+    /// Open tabs + selection. App-scoped (see WorkspaceModel) so closing the
+    /// window to the menu bar doesn't orphan the live ssh sessions.
+    let workspace: WorkspaceModel
+    let sftpConnection: SFTPConnection
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    @State private var tabs: [WorkspaceTab] = []
-    @State private var selectedTabID: UUID?
-    @State private var sftpConnection = SFTPConnection()
+
+    private var tabs: [WorkspaceTab] { workspace.tabs }
+    private var selectedTabID: UUID? { workspace.selectedTabID }
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        @Bindable var workspace = workspace
+        return NavigationSplitView(columnVisibility: $columnVisibility) {
             SessionSidebarView(store: store, tunnelManager: tunnelManager,
                                connectedHostIDs: connectedHostIDs, onConnect: connect)
                 .navigationTitle("Sessions")
@@ -28,8 +33,8 @@ struct MainWindowView: View {
         } detail: {
             TerminalContainerView(
                 store: store,
-                tabs: $tabs,
-                selectedTabID: $selectedTabID,
+                tabs: $workspace.tabs,
+                selectedTabID: $workspace.selectedTabID,
                 onCwdChange: { host, path in
                     Task { await sftpConnection.terminalDidReportCwd(host: host, path: path) }
                 },
@@ -49,6 +54,24 @@ struct MainWindowView: View {
         .onChange(of: terminalHostIDs) { _, ids in
             if let host = sftpConnection.connectedHost, !ids.contains(host.id) {
                 Task { await sftpConnection.disconnect() }
+            }
+        }
+        // Switching terminal tabs re-points the file browser at THAT server, so
+        // it never sits on the previous host's folders.
+        .onChange(of: selectedTabID) { _, _ in
+            followSelectedTab()
+        }
+    }
+
+    /// Keeps the SFTP pane on the same server as the visible terminal tab.
+    private func followSelectedTab() {
+        guard let tab = tabs.first(where: { $0.id == selectedTabID }),
+              case .terminal(let terminalTab) = tab,
+              let host = terminalTab.panes.first?.host else { return }
+        guard sftpConnection.connectedHost?.id != host.id else { return }
+        Task {
+            await sftpConnection.connect(to: host) { jumpID in
+                store.hosts.first { $0.id == jumpID }
             }
         }
     }
@@ -96,11 +119,11 @@ struct MainWindowView: View {
         }
 
         if let existingTerminalTab {
-            selectedTabID = existingTerminalTab.id
+            workspace.selectedTabID = existingTerminalTab.id
         } else {
             let tab = TerminalTab(title: host.name, panes: [TerminalTabPane(host: host)])
-            tabs.append(.terminal(tab))
-            selectedTabID = tab.id
+            workspace.tabs.append(.terminal(tab))
+            workspace.selectedTabID = tab.id
         }
         Task {
             await sftpConnection.connect(to: host) { jumpID in
@@ -118,11 +141,11 @@ struct MainWindowView: View {
         }
 
         if let existingVNCTab {
-            selectedTabID = existingVNCTab.id
+            workspace.selectedTabID = existingVNCTab.id
         } else {
             let tab = VNCTab(host: host, title: host.name)
-            tabs.append(.vnc(tab))
-            selectedTabID = tab.id
+            workspace.tabs.append(.vnc(tab))
+            workspace.selectedTabID = tab.id
         }
     }
 }
@@ -145,5 +168,6 @@ enum BHTerminalWindow {
 }
 
 #Preview {
-    MainWindowView(store: SessionStore(), tunnelManager: TunnelManager())
+    MainWindowView(store: SessionStore(), tunnelManager: TunnelManager(),
+                   workspace: WorkspaceModel(), sftpConnection: SFTPConnection())
 }

@@ -63,6 +63,11 @@ struct TerminalContainerView: View {
     @State private var commandDispatch: PaneCommandDispatch?
     @State private var isLoggingActive = false
     @State private var isManagingSnippets = false
+    /// Panes whose ssh exited unexpectedly (network drop, server reboot). Kept
+    /// on screen with a Reconnect button instead of vanishing.
+    @State private var droppedPanes: Set<UUID> = []
+    /// Bumped on reconnect so SplitPaneView swaps in the new session's view.
+    @State private var reconnectToken = 0
 
     private var selectedTabIndex: Int? {
         tabs.firstIndex { $0.id == selectedTabID }
@@ -75,9 +80,17 @@ struct TerminalContainerView: View {
             } else {
                 tabBar
                 Divider()
-                if let index = selectedTabIndex {
-                    content(for: tabs[index], index: index)
-                        .id(tabs[index].id)
+                // EVERY tab is kept in the hierarchy — only the selected one is
+                // visible. Rendering just the selected tab (the old behavior)
+                // made SwiftUI tear the others down, which killed their SSH
+                // sessions, so returning to a tab showed a brand-new login.
+                ZStack {
+                    ForEach(tabs) { tab in
+                        content(for: tab)
+                            .opacity(tab.id == selectedTabID ? 1 : 0)
+                            .allowsHitTesting(tab.id == selectedTabID)
+                            .id(tab.id)
+                    }
                 }
             }
         }
@@ -95,16 +108,23 @@ struct TerminalContainerView: View {
     }
 
     @ViewBuilder
-    private func content(for tab: WorkspaceTab, index: Int) -> some View {
+    private func content(for tab: WorkspaceTab) -> some View {
         switch tab {
         case .terminal(let terminalTab):
             SplitPaneView(
                 panes: terminalTab.panes,
                 axis: terminalTab.axis,
                 store: store,
-                broadcastEnabled: broadcastEnabled,
-                commandDispatch: commandDispatch,
-                onPaneExit: { paneID in closePane(paneID, inTabAt: index) },
+                // Both are scoped to the visible tab: every tab now has a live
+                // SplitPaneView, so an unscoped broadcast/snippet would also
+                // reach background tabs.
+                broadcastEnabled: broadcastEnabled && tab.id == selectedTabID,
+                commandDispatch: tab.id == selectedTabID ? commandDispatch : nil,
+                isActive: tab.id == selectedTabID,
+                reconnectToken: reconnectToken,
+                onPaneExit: { paneID, exitCode in
+                    handlePaneExit(paneID, exitCode: exitCode, inTab: terminalTab.id)
+                },
                 onCwdChange: { paneID, path in
                     if let host = terminalTab.panes.first(where: { $0.id == paneID })?.host {
                         onCwdChange(host, path)
@@ -116,8 +136,50 @@ struct TerminalContainerView: View {
                     }
                 }
             )
+            .overlay(alignment: .top) {
+                if let pane = terminalTab.panes.first(where: { droppedPanes.contains($0.id) }) {
+                    disconnectedBanner(for: pane)
+                }
+            }
         case .vnc(let vncTab):
             VNCTabView(host: vncTab.host)
+        }
+    }
+
+    /// Shown in place of silently closing the tab when ssh dies unexpectedly —
+    /// the common case being a dropped/changed network.
+    private func disconnectedBanner(for pane: TerminalTabPane) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            Text("Disconnected from \(pane.host.name).")
+                .font(.callout)
+            Button("Reconnect") { reconnect(pane) }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.bar)
+        .overlay(Divider(), alignment: .bottom)
+    }
+
+    private func reconnect(_ pane: TerminalTabPane) {
+        droppedPanes.remove(pane.id)
+        TerminalSessionRegistry.shared.reconnect(paneID: pane.id, host: pane.host) { jumpID in
+            store.hosts.first { $0.id == jumpID }
+        }
+        reconnectToken += 1
+    }
+
+    /// A clean logout (exit 0) closes the pane like any terminal would; an
+    /// unexpected exit keeps it so the session can be reconnected in place.
+    private func handlePaneExit(_ paneID: UUID, exitCode: Int32?, inTab tabID: UUID) {
+        if exitCode == 0 {
+            closePane(paneID, inTab: tabID)
+        } else {
+            droppedPanes.insert(paneID)
         }
     }
 
@@ -255,9 +317,14 @@ struct TerminalContainerView: View {
         tabs[tabIndex] = .terminal(terminalTab)
     }
 
-    private func closePane(_ paneID: UUID, inTabAt index: Int) {
-        guard tabs.indices.contains(index), case .terminal(var terminalTab) = tabs[index] else { return }
+    private func closePane(_ paneID: UUID, inTab tabID: UUID) {
+        guard let index = tabs.firstIndex(where: { $0.id == tabID }),
+              case .terminal(var terminalTab) = tabs[index] else { return }
         terminalTab.panes.removeAll { $0.id == paneID }
+        droppedPanes.remove(paneID)
+        // The registry owns the ssh process now, so closing must terminate it
+        // here — view teardown deliberately no longer does.
+        TerminalSessionRegistry.shared.terminate(paneID: paneID)
         if terminalTab.panes.isEmpty {
             closeTab(terminalTab.id)
         } else {
@@ -266,6 +333,12 @@ struct TerminalContainerView: View {
     }
 
     private func closeTab(_ id: UUID) {
+        if let tab = tabs.first(where: { $0.id == id }), case .terminal(let terminalTab) = tab {
+            for pane in terminalTab.panes {
+                droppedPanes.remove(pane.id)
+                TerminalSessionRegistry.shared.terminate(paneID: pane.id)
+            }
+        }
         tabs.removeAll { $0.id == id }
         if selectedTabID == id {
             selectedTabID = tabs.last?.id
