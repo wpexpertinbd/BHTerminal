@@ -28,6 +28,15 @@ struct BHTerminalApp: App {
                 }
                 .keyboardShortcut("i", modifiers: [.command, .shift])
             }
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    Task {
+                        await UpdateChecker.shared.check()
+                        // Land the user where the result (and Update Now) is.
+                        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                    }
+                }
+            }
         }
 
         Settings {
@@ -44,6 +53,7 @@ struct BHTerminalApp: App {
 /// `openWindow` from the environment.
 private struct MenuBarContent: View {
     @Environment(\.openWindow) private var openWindow
+    private var updater = UpdateChecker.shared
 
     var body: some View {
         Button("Open BHTerminal") {
@@ -51,6 +61,15 @@ private struct MenuBarContent: View {
             openWindow(id: "main")
         }
         .keyboardShortcut("o")
+
+        // Only shown once a check has actually found something newer, so the
+        // menu stays quiet the rest of the time.
+        if let version = updater.availableVersion {
+            Divider()
+            Button("Update to \(version)…") {
+                Task { await updater.downloadAndInstall() }
+            }
+        }
 
         Divider()
 

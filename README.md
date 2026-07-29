@@ -32,6 +32,9 @@ and see [`macos/README.md`](macos/README.md).
 - **SSH tunnels** — local / remote / dynamic, kept running in the background.
 - **Menu-bar mode** — close the window and it keeps running (tunnels stay up).
 - **Import from MobaXterm** (`.txt` passwords export or `.mxtsessions`) and `~/.ssh/config`.
+- **Built-in updater** — checks GitHub Releases automatically (can be turned off) or on
+  demand from **Preferences ▸ Updates** / **BHTerminal ▸ Check for Updates…**, then installs
+  the new version for you.
 - **Secure by design** — secrets only in the OS keychain, host-key verification, argument-injection hardened.
 
 ## How it works — one spec, native shells

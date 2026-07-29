@@ -14,6 +14,9 @@ struct MainWindowView: View {
     let workspace: WorkspaceModel
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var dismissedUpdateBanner = false
+
+    private var updater = UpdateChecker.shared
 
     private var tabs: [WorkspaceTab] { workspace.tabs }
     private var selectedTabID: UUID? { workspace.selectedTabID }
@@ -65,6 +68,42 @@ struct MainWindowView: View {
         .onChange(of: selectedTabID) { _, _ in
             activateSFTPForSelectedTab()
         }
+        // Quiet update check (throttled, and silent on failure — being offline
+        // at login is normal). Surfaces as the banner below.
+        .task { await UpdateChecker.shared.check(auto: true) }
+        .safeAreaInset(edge: .top) {
+            if updater.updateAvailable, !dismissedUpdateBanner {
+                updateBanner
+            }
+        }
+    }
+
+    /// Non-modal "an update is ready" strip — never interrupts what you're doing
+    /// in a terminal, unlike an alert.
+    private var updateBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.down.circle.fill")
+                .foregroundStyle(Color.accentColor)
+            Text("BHTerminal \(updater.availableVersion ?? "") is available.")
+                .font(.callout)
+            Button("Update Now") { Task { await updater.downloadAndInstall() } }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            Button("Release Notes") { updater.openReleasesPage() }
+                .controlSize(.small)
+            Spacer()
+            Button {
+                dismissedUpdateBanner = true
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.borderless)
+            .help("Dismiss until next launch")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.bar)
+        .overlay(Divider(), alignment: .bottom)
     }
 
     private var sftpRegistry: SFTPSessionRegistry { SFTPSessionRegistry.shared }
