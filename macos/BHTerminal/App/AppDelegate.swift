@@ -26,6 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         MainActor.assumeIsolated {
             TerminalSessionRegistry.shared.terminateAll()
+            // Each host's SFTP channel is a child ssh process too.
+            SFTPSessionRegistry.shared.closeAllForTermination()
         }
     }
 

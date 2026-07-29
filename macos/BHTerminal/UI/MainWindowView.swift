@@ -12,7 +12,6 @@ struct MainWindowView: View {
     /// Open tabs + selection. App-scoped (see WorkspaceModel) so closing the
     /// window to the menu bar doesn't orphan the live ssh sessions.
     let workspace: WorkspaceModel
-    let sftpConnection: SFTPConnection
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
@@ -27,7 +26,10 @@ struct MainWindowView: View {
                 .navigationTitle("Sessions")
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
         } content: {
-            SFTPBrowserView(connection: sftpConnection)
+            // Shows the selected terminal's OWN long-lived SFTP session, so
+            // switching tabs swaps the view rather than reconnecting.
+            SFTPBrowserView(connection: activeSFTPConnection)
+                .id(selectedHost?.id)
                 .navigationSplitViewColumnWidth(min: 260, ideal: 360, max: 600)
                 .navigationTitle("Files")
         } detail: {
@@ -36,43 +38,53 @@ struct MainWindowView: View {
                 tabs: $workspace.tabs,
                 selectedTabID: $workspace.selectedTabID,
                 onCwdChange: { host, path in
-                    Task { await sftpConnection.terminalDidReportCwd(host: host, path: path) }
+                    if let connection = sftpRegistry.existing(for: host.id) {
+                        Task { await connection.terminalDidReportCwd(host: host, path: path) }
+                    }
                 },
                 onReady: { host in
                     // Silent signal that the shared SSH connection is up — lets
                     // SFTP auto-(re)connect if its initial attempt lost the race
                     // with the terminal's authentication (no shell hook needed).
-                    Task { await sftpConnection.terminalDidBecomeReady(host: host) }
+                    if let connection = sftpRegistry.existing(for: host.id) {
+                        Task { await connection.terminalDidBecomeReady(host: host) }
+                    }
                 }
             )
             .navigationTitle(selectedTabTitle)
         }
         .navigationSplitViewStyle(.balanced)
         .background(WindowConfigurator())
-        // When the last terminal tab for the SFTP's host closes, close SFTP too
-        // — it can't outlive the connection it was sharing anyway.
+        // An SFTP session rides its terminal's authenticated connection, so drop
+        // any whose host no longer has an open terminal.
         .onChange(of: terminalHostIDs) { _, ids in
-            if let host = sftpConnection.connectedHost, !ids.contains(host.id) {
-                Task { await sftpConnection.disconnect() }
-            }
+            Task { await sftpRegistry.pruneSessions(keepingHostIDs: ids) }
         }
-        // Switching terminal tabs re-points the file browser at THAT server, so
-        // it never sits on the previous host's folders.
+        // Selecting a tab shows that host's session, connecting it only the
+        // first time (or if it was disconnected).
         .onChange(of: selectedTabID) { _, _ in
-            followSelectedTab()
+            activateSFTPForSelectedTab()
         }
     }
 
-    /// Keeps the SFTP pane on the same server as the visible terminal tab.
-    private func followSelectedTab() {
+    private var sftpRegistry: SFTPSessionRegistry { SFTPSessionRegistry.shared }
+
+    /// Host of the selected tab, when it's a terminal (SFTP is SSH-only).
+    private var selectedHost: Host? {
         guard let tab = tabs.first(where: { $0.id == selectedTabID }),
-              case .terminal(let terminalTab) = tab,
-              let host = terminalTab.panes.first?.host else { return }
-        guard sftpConnection.connectedHost?.id != host.id else { return }
-        Task {
-            await sftpConnection.connect(to: host) { jumpID in
-                store.hosts.first { $0.id == jumpID }
-            }
+              case .terminal(let terminalTab) = tab else { return nil }
+        return terminalTab.panes.first?.host
+    }
+
+    private var activeSFTPConnection: SFTPConnection? {
+        guard let host = selectedHost else { return nil }
+        return sftpRegistry.existing(for: host.id)
+    }
+
+    private func activateSFTPForSelectedTab() {
+        guard let host = selectedHost else { return }
+        sftpRegistry.activate(host: host) { jumpID in
+            store.hosts.first { $0.id == jumpID }
         }
     }
 
@@ -125,10 +137,8 @@ struct MainWindowView: View {
             workspace.tabs.append(.terminal(tab))
             workspace.selectedTabID = tab.id
         }
-        Task {
-            await sftpConnection.connect(to: host) { jumpID in
-                store.hosts.first { $0.id == jumpID }
-            }
+        sftpRegistry.activate(host: host) { jumpID in
+            store.hosts.first { $0.id == jumpID }
         }
     }
 
@@ -169,5 +179,5 @@ enum BHTerminalWindow {
 
 #Preview {
     MainWindowView(store: SessionStore(), tunnelManager: TunnelManager(),
-                   workspace: WorkspaceModel(), sftpConnection: SFTPConnection())
+                   workspace: WorkspaceModel())
 }

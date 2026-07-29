@@ -5,6 +5,28 @@ import UniformTypeIdentifiers
 /// terminal (see SFTPConnection) but is driven by the same host selection —
 /// MainWindowView connects both together on double-click.
 struct SFTPBrowserView: View {
+    /// The selected terminal's own session (one per host, held by
+    /// SFTPSessionRegistry). nil when no terminal tab is selected.
+    var connection: SFTPConnection?
+
+    var body: some View {
+        if let connection {
+            SFTPBrowserContent(connection: connection)
+        } else {
+            VStack(spacing: 8) {
+                Image(systemName: "folder")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.secondary)
+                Text("Double-click a host to browse its files")
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+/// The browser proper — always driven by one concrete host's session.
+private struct SFTPBrowserContent: View {
     var connection: SFTPConnection
 
     @State private var selection: Set<String> = []
@@ -144,7 +166,13 @@ struct SFTPBrowserView: View {
                 ProgressView().controlSize(.small)
             }
 
-            Button { Task { await connection.disconnect() } } label: {
+            Button {
+                if let hostID = connection.connectedHost?.id {
+                    Task { await SFTPSessionRegistry.shared.disconnect(hostID: hostID) }
+                } else {
+                    Task { await connection.disconnect() }
+                }
+            } label: {
                 Image(systemName: "eject")
             }
             .help("Disconnect SFTP")
@@ -160,7 +188,9 @@ struct SFTPBrowserView: View {
         HStack {
             Toggle(isOn: Binding(
                 get: { connection.followTerminal },
-                set: { connection.setFollowTerminal($0) }
+                // One user-level preference, so apply it to every host's session
+                // rather than letting the checkbox flip as you change tabs.
+                set: { SFTPSessionRegistry.shared.setFollowTerminalForAll($0) }
             )) {
                 Text("Follow Terminal").font(.caption)
             }

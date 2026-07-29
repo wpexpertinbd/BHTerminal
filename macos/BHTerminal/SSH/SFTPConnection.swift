@@ -257,6 +257,13 @@ final class SFTPConnection {
         client = nil
     }
 
+    /// Synchronous teardown for app termination, where an async Task would
+    /// never get a chance to run before the process exits.
+    func closeForTermination() {
+        client?.close()
+        client = nil
+    }
+
     private func join(_ base: String, _ name: String) -> String {
         base.hasSuffix("/") ? base + name : base + "/" + name
     }

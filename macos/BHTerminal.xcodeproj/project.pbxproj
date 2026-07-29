@@ -44,6 +44,7 @@
 		93E4601019B54C49A9515EA6 /* SessionImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A632E03BD48A28C0CAE24036 /* SessionImportTests.swift */; };
 		94901BA303B2FB7050E1E370 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 3C6B0625D13AAD03ABAC27D1 /* SwiftTerm */; };
 		9B469019C6871F1377B99E80 /* SFTPConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AE561171541646A349D480F /* SFTPConnection.swift */; };
+		9B6C0138742EDFAA4C326D5A /* SFTPSessionRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46FE7B065300E6D7D8D4197 /* SFTPSessionRegistry.swift */; };
 		9C57B551E8197383E55E58A6 /* CwdFollowCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A8BE7197CBC12F725B7D51 /* CwdFollowCenter.swift */; };
 		A5FD4540506DBBDA5347BEEC /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E506A523A4AACBB3C830E8A /* MainWindowView.swift */; };
 		A7C12E6271D4AEB191F4FAA9 /* SessionImportUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB56A467A7C3880BBA61AEF4 /* SessionImportUI.swift */; };
@@ -143,6 +144,7 @@
 		E0CE6DACEF067A630E3AA6F0 /* TunnelArgvBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelArgvBuilderTests.swift; sourceTree = "<group>"; };
 		EEFFB5EF6C39829603712850 /* HostBackwardCompatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostBackwardCompatTests.swift; sourceTree = "<group>"; };
 		F1A8BE7197CBC12F725B7D51 /* CwdFollowCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CwdFollowCenter.swift; sourceTree = "<group>"; };
+		F46FE7B065300E6D7D8D4197 /* SFTPSessionRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SFTPSessionRegistry.swift; sourceTree = "<group>"; };
 		F6462B81C835F24911564F8C /* WorkspaceModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceModel.swift; sourceTree = "<group>"; };
 		F724A49CFE343058E3BD79F4 /* PTYSessionMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTYSessionMenuTests.swift; sourceTree = "<group>"; };
 		F8A11A1E283D814F338C088D /* OSC7Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OSC7Tests.swift; sourceTree = "<group>"; };
@@ -191,6 +193,7 @@
 				245290FE53435B80EF4456E3 /* PTYSession.swift */,
 				5AE561171541646A349D480F /* SFTPConnection.swift */,
 				0C2914B89C42B1E2260AAF18 /* SFTPProtocolClient.swift */,
+				F46FE7B065300E6D7D8D4197 /* SFTPSessionRegistry.swift */,
 				5F66B744C28A47D660D50937 /* TerminalSessionRegistry.swift */,
 				447021535C27DD401EDA45BB /* TunnelManager.swift */,
 				A7C1753ED158FB1FF88829F3 /* VNCSession.swift */,
@@ -422,6 +425,7 @@
 				9B469019C6871F1377B99E80 /* SFTPConnection.swift in Sources */,
 				339991C514E317889F3D6FF0 /* SFTPEntry.swift in Sources */,
 				78CDAA8C1223A4983B949FC1 /* SFTPProtocolClient.swift in Sources */,
+				9B6C0138742EDFAA4C326D5A /* SFTPSessionRegistry.swift in Sources */,
 				D1998C567AC7F807B2D4DB9F /* SSHArgvBuilder.swift in Sources */,
 				BA40DCD3C01EF1AC45DDE878 /* SSHConfigImporter.swift in Sources */,
 				03E81455784DA401D8E6DD9A /* SSHSafety.swift in Sources */,

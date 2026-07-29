@@ -11,14 +11,13 @@ struct BHTerminalApp: App {
     @State private var store = SessionStore()
     @State private var tunnelManager = TunnelManager()
     @State private var workspace = WorkspaceModel()
-    @State private var sftpConnection = SFTPConnection()
 
     var body: some Scene {
         // A single main window (id "main") — closing it drops the app to the
         // menu bar; "Open BHTerminal" re-opens this exact window.
         Window("BHTerminal", id: "main") {
             MainWindowView(store: store, tunnelManager: tunnelManager,
-                           workspace: workspace, sftpConnection: sftpConnection)
+                           workspace: workspace)
         }
         .defaultSize(width: 1280, height: 800)
         .windowToolbarStyle(.unified)
