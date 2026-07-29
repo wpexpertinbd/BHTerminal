@@ -29,7 +29,21 @@ struct PaneCommandDispatch: Equatable {
 final class PaddedTerminalContainer: NSView {
     static let padding: CGFloat = 8
 
+    /// Held so the margin can keep matching the terminal's own background. A
+    /// fixed snapshot of the color went wrong the moment the two could differ:
+    /// taken before the theme was applied it left a black frame around a light
+    /// terminal, and it never followed a theme change afterwards.
+    private weak var session: PTYSession?
+
+    override func layout() {
+        super.layout()
+        if let session {
+            layer?.backgroundColor = session.nativeBackgroundColor.cgColor
+        }
+    }
+
     init(session: PTYSession) {
+        self.session = session
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = session.nativeBackgroundColor.cgColor

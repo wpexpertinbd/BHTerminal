@@ -36,8 +36,10 @@ final class TerminalSessionRegistry {
         if let existing = sessions[paneID] { return existing }
         let session = PTYSession(frame: .zero)
         sessions[paneID] = session
-        containers[paneID] = PaddedTerminalContainer(session: session)
+        // connect() applies the theme, so wrap it only afterwards — the
+        // container's margin colour is taken from the session.
         session.connect(to: host, resolveJumpHost: resolveJumpHost)
+        containers[paneID] = PaddedTerminalContainer(session: session)
         return session
     }
 

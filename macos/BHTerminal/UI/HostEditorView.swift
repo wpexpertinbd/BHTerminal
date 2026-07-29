@@ -263,26 +263,36 @@ struct HostEditorView: View {
             host = store.addHost(host)
         }
 
+        // The fields are pre-filled from the Keychain when editing, so an empty
+        // one means the user deliberately cleared it — delete the stored secret
+        // rather than leaving the old value behind (clearing a passphrase used
+        // to silently keep it forever).
         switch connectionType {
         case .ssh:
             switch authKind {
             case .password:
-                if !password.isEmpty {
-                    try? KeychainService.save(account: host.keychainAccount, secret: password)
-                }
+                saveOrClear(secret: password, account: host.keychainAccount)
+                try? KeychainService.delete(account: host.passphraseAccount)
             case .privateKey:
-                if !passphrase.isEmpty {
-                    try? KeychainService.save(account: host.passphraseAccount, secret: passphrase)
-                }
+                saveOrClear(secret: passphrase, account: host.passphraseAccount)
+                try? KeychainService.delete(account: host.keychainAccount)
             case .agent:
-                break
+                // Agent auth needs neither, so don't leave stale secrets around.
+                try? KeychainService.delete(account: host.keychainAccount)
+                try? KeychainService.delete(account: host.passphraseAccount)
             }
         case .vnc:
-            if !password.isEmpty {
-                try? KeychainService.save(account: host.keychainAccount, secret: password)
-            }
+            saveOrClear(secret: password, account: host.keychainAccount)
         }
 
         dismiss()
+    }
+
+    private func saveOrClear(secret: String, account: String) {
+        if secret.isEmpty {
+            try? KeychainService.delete(account: account)
+        } else {
+            try? KeychainService.save(account: account, secret: secret)
+        }
     }
 }

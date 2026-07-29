@@ -29,7 +29,16 @@ final class PTYSession: LocalProcessTerminalView {
     /// so allow a few — capped so a wrong passphrase can't loop forever.
     private var secretFillsRemaining = 0
     private var recentOutput: [UInt8] = []
-    private let promptScanWindow = 128
+    private let promptScanWindow = 256
+
+    /// Fragments that mean ssh is sitting at a prompt waiting for a human,
+    /// rather than showing shell output. Used to tell "the connection went
+    /// quiet because it's ready" apart from "…because it's waiting for input".
+    private static let authPromptNeedles = [
+        "passphrase for", "password:", "password for", "verification code",
+        "authentication code", "one-time password", "passcode", "token:",
+        "otp:", "(yes/no", "authenticity of host"
+    ]
 
     /// Output has settled into a real shell prompt → login/auth finished. This
     /// is the silent signal that drives the SFTP pane's auto-connect (it needs
@@ -166,17 +175,14 @@ final class PTYSession: LocalProcessTerminalView {
     }
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
-        if secretFillsRemaining > 0, let secret = authSecret {
+        // Tracked until the shell is up, so the settle check below can tell a
+        // waiting prompt from a finished login.
+        if !hasSignaledReady {
             recentOutput.append(contentsOf: slice)
             if recentOutput.count > promptScanWindow {
                 recentOutput.removeFirst(recentOutput.count - promptScanWindow)
             }
-            let tail = String(decoding: recentOutput, as: UTF8.self).lowercased()
-            if tail.contains(authNeedle) {
-                secretFillsRemaining -= 1
-                recentOutput.removeAll() // don't re-match the same prompt still in the window
-                process.send(data: ArraySlice(Array((secret + "\r").utf8)))
-            }
+            fillSecretIfPrompted()
         }
 
         logFileHandle?.write(Data(slice))
@@ -208,8 +214,50 @@ final class PTYSession: LocalProcessTerminalView {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: workItem)
     }
 
+    /// Types the Keychain secret in as soon as ssh's matching prompt shows.
+    private func fillSecretIfPrompted() {
+        guard secretFillsRemaining > 0, let secret = authSecret, let process else { return }
+        let tail = String(decoding: recentOutput, as: UTF8.self).lowercased()
+        guard tail.contains(authNeedle) else { return }
+        secretFillsRemaining -= 1
+        recentOutput.removeAll() // don't re-match the same prompt still in the window
+        process.send(data: ArraySlice(Array((secret + "\r").utf8)))
+    }
+
+    /// Whether the last line of output is a prompt waiting for input. Prompts
+    /// don't end in a newline, so the tail ends with ":" / "?" / "(yes/no…".
+    /// Pure so it can be unit-tested without a live ssh.
+    static func looksLikeAuthPrompt(_ output: String) -> Bool {
+        let lines = output.split(separator: "\n", omittingEmptySubsequences: false)
+        let lastLine = (lines.last.map(String.init) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !lastLine.isEmpty else { return false }
+        guard lastLine.hasSuffix(":") || lastLine.hasSuffix("?")
+                || lastLine.contains("(yes/no") else { return false }
+        return authPromptNeedles.contains { lastLine.contains($0) }
+    }
+
+    private var isWaitingOnAuthPrompt: Bool {
+        Self.looksLikeAuthPrompt(String(decoding: recentOutput, as: UTF8.self))
+    }
+
     private func handleOutputSettled() {
         guard !hasSignaledReady, let process, process.running else { return }
+
+        // An output lull is indistinguishable from a prompt waiting for input,
+        // so check for one before declaring the login finished. Assuming "quiet
+        // == ready" broke any server that took longer than the debounce to ask
+        // for a key passphrase: the stored secret was wiped before ssh had even
+        // asked, so nothing answered the prompt (session hung forever) and the
+        // SFTP pane was told to connect to a session that wasn't up yet.
+        if isWaitingOnAuthPrompt {
+            fillSecretIfPrompted()
+            // Answering it — or the user typing — produces output, which
+            // re-arms this check from dataReceived. No polling needed.
+            return
+        }
+
         hasSignaledReady = true
         // A real shell prompt is showing → auth is done. Drop the secret from
         // memory and stop watching for a prompt to fill.

@@ -49,6 +49,7 @@
 		A7C12E6271D4AEB191F4FAA9 /* SessionImportUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB56A467A7C3880BBA61AEF4 /* SessionImportUI.swift */; };
 		B232C05A699E4DE85B719716 /* VNCSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C1753ED158FB1FF88829F3 /* VNCSession.swift */; };
 		BA40DCD3C01EF1AC45DDE878 /* SSHConfigImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96BEEDB5B457081FBEDAA1AC /* SSHConfigImporter.swift */; };
+		BAAA28EC103C802C14A4A7CD /* PTYSessionPromptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B542E17D233A80D1FFB76DB /* PTYSessionPromptTests.swift */; };
 		BC88BF5947B7F8CC444989ED /* SSHArgvBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774008621F83060192E6A888 /* SSHArgvBuilderTests.swift */; };
 		C4BA551689D4EE3CC3FCB64B /* SessionImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C90E87953A11E66B65798A12 /* SessionImport.swift */; };
 		C57E26F0FA5CA98201E2CC3B /* RoyalVNCKit in Embed Frameworks */ = {isa = PBXBuildFile; productRef = FFE85CF989F97FFCCC43C2D8 /* RoyalVNCKit */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -126,6 +127,7 @@
 		9268552BA16B48F621EFD030 /* LoginItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItem.swift; sourceTree = "<group>"; };
 		96BEEDB5B457081FBEDAA1AC /* SSHConfigImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHConfigImporter.swift; sourceTree = "<group>"; };
 		9AD8FB055F3C75C447F751F3 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
+		9B542E17D233A80D1FFB76DB /* PTYSessionPromptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTYSessionPromptTests.swift; sourceTree = "<group>"; };
 		A1096E66D19ADBEC91A03B6B /* Host.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Host.swift; sourceTree = "<group>"; };
 		A632E03BD48A28C0CAE24036 /* SessionImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionImportTests.swift; sourceTree = "<group>"; };
 		A7C1753ED158FB1FF88829F3 /* VNCSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VNCSession.swift; sourceTree = "<group>"; };
@@ -251,6 +253,7 @@
 				13C1D4D21139E190A2A464EF /* KeychainServiceTests.swift */,
 				F8A11A1E283D814F338C088D /* OSC7Tests.swift */,
 				F724A49CFE343058E3BD79F4 /* PTYSessionMenuTests.swift */,
+				9B542E17D233A80D1FFB76DB /* PTYSessionPromptTests.swift */,
 				A632E03BD48A28C0CAE24036 /* SessionImportTests.swift */,
 				5907C3669A0F8B7B6801C804 /* SessionStoreTests.swift */,
 				D264103AF3FB8AFF518A18B5 /* SFTPProtocolClientTests.swift */,
@@ -452,6 +455,7 @@
 				53C43679EBBDC97290CF0357 /* KeychainServiceTests.swift in Sources */,
 				18984FE8DD8CE4554AFD5DF2 /* OSC7Tests.swift in Sources */,
 				3F0A338E1A9E7C0072FD4512 /* PTYSessionMenuTests.swift in Sources */,
+				BAAA28EC103C802C14A4A7CD /* PTYSessionPromptTests.swift in Sources */,
 				889774B8062B1CB945FC7406 /* SFTPProtocolClientTests.swift in Sources */,
 				BC88BF5947B7F8CC444989ED /* SSHArgvBuilderTests.swift in Sources */,
 				93E4601019B54C49A9515EA6 /* SessionImportTests.swift in Sources */,
