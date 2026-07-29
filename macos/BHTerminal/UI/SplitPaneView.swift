@@ -228,7 +228,19 @@ struct SplitPaneView: NSViewRepresentable {
 
         func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
 
-        func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
+        /// Distro shell configs already publish the cwd in the window title on
+        /// every prompt (TERM is xterm-256color), so cwd-follow reads it from
+        /// here instead of typing a reporting hook into the user's session —
+        /// which the remote shell echoed as a wall of text.
+        func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
+            guard let session = source as? PTYSession,
+                  let paneID = paneIDBySession[ObjectIdentifier(session)],
+                  let path = TerminalTitleCwd.parsePath(fromTitle: title) else { return }
+            let callback = owner?.onCwdChange
+            DispatchQueue.main.async {
+                callback?(paneID, path)
+            }
+        }
 
         func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
             guard let session = source as? PTYSession,

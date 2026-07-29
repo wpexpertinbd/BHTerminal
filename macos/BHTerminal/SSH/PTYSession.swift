@@ -46,8 +46,7 @@ final class PTYSession: LocalProcessTerminalView {
     private var hasSignaledReady = false
     var onReady: (() -> Void)?
 
-    private var hasInjectedCwdHook = false
-    private var cwdHookWorkItem: DispatchWorkItem?
+    private var settleWorkItem: DispatchWorkItem?
 
     private var logFileHandle: FileHandle?
 
@@ -61,11 +60,6 @@ final class PTYSession: LocalProcessTerminalView {
     func connect(to host: Host, resolveJumpHost: @escaping (UUID) -> Host? = { _ in nil }) {
         self.host = host
         applyAppearance()
-        // Inject the cwd hook late if the user turns on "Follow Terminal" after
-        // this terminal is already connected.
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(followTerminalEnabled),
-            name: CwdFollowCenter.didEnable, object: nil)
 
         let executable: String
         let args: [String]
@@ -197,7 +191,6 @@ final class PTYSession: LocalProcessTerminalView {
     }
 
     deinit {
-        NotificationCenter.default.removeObserver(self)
         logFileHandle?.closeFile()
     }
 
@@ -206,11 +199,11 @@ final class PTYSession: LocalProcessTerminalView {
     /// real prompt, not mid-banner/mid-password-exchange output).
     private func scheduleSettleCheck() {
         guard !hasSignaledReady else { return }
-        cwdHookWorkItem?.cancel()
+        settleWorkItem?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
             self?.handleOutputSettled()
         }
-        cwdHookWorkItem = workItem
+        settleWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: workItem)
     }
 
@@ -264,31 +257,7 @@ final class PTYSession: LocalProcessTerminalView {
         authSecret = nil
         secretFillsRemaining = 0
         recentOutput = []
-        // Tell the SFTP pane the shared connection is up (silent — no hook).
+        // Tell the SFTP pane the shared connection is up.
         onReady?()
-        // Install the cwd-reporting hook only if the user is following the
-        // terminal; otherwise skip it so login stays clean (no echoed wall of
-        // shell). If they toggle following on later, followTerminalEnabled
-        // installs it then.
-        maybeInjectCwdHook()
     }
-
-    @objc private func followTerminalEnabled() { maybeInjectCwdHook() }
-
-    private func maybeInjectCwdHook() {
-        guard hasSignaledReady, !hasInjectedCwdHook,
-              CwdFollowCenter.shared.isEnabled,
-              let process, process.running else { return }
-        hasInjectedCwdHook = true
-        process.send(data: ArraySlice(Array(PTYSession.cwdHookScript.utf8)))
-    }
-
-    /// One line, leading space (many shells' HIST_IGNORE_SPACE keeps it out
-    /// of history), silently no-ops on shells other than bash/zsh.
-    private static let cwdHookScript: String = {
-        let body = """
-         if [ -n "$ZSH_VERSION" ]; then __bhterm_cwd() { printf '\\033]7;file://%s%s\\033\\\\' "$(hostname)" "$PWD"; }; autoload -Uz add-zsh-hook >/dev/null 2>&1 && add-zsh-hook precmd __bhterm_cwd || PROMPT_COMMAND='__bhterm_cwd'; elif [ -n "$BASH_VERSION" ]; then __bhterm_cwd() { printf '\\033]7;file://%s%s\\033\\\\' "$(hostname)" "$PWD"; }; case "$PROMPT_COMMAND" in *__bhterm_cwd*) ;; "") PROMPT_COMMAND='__bhterm_cwd';; *) PROMPT_COMMAND="__bhterm_cwd;$PROMPT_COMMAND";; esac; fi; __bhterm_cwd 2>/dev/null
-        """
-        return body + "\r"
-    }()
 }

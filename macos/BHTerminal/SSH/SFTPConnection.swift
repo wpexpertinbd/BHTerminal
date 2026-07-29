@@ -34,6 +34,9 @@ final class SFTPConnection {
 
     private var client: SFTPProtocolClient?
     private var generation = 0
+    /// The directory the session lands in, i.e. the remote home — used to
+    /// expand the "~" that window titles report.
+    private var homePath: String?
     /// Latest cwd reported by the terminal (OSC 7), remembered even while
     /// not following, so toggling "Follow Terminal" on jumps there immediately.
     private var lastTerminalPath: String?
@@ -60,6 +63,7 @@ final class SFTPConnection {
         errorMessage = nil
         currentPath = "."
         lastTerminalPath = nil
+        homePath = nil
         isLoading = true
         statusMessage = "Connecting…"
         defer { if gen == generation { isLoading = false; statusMessage = nil } }
@@ -105,6 +109,7 @@ final class SFTPConnection {
         entries = []
         currentPath = "."
         lastTerminalPath = nil
+        homePath = nil
         errorMessage = nil
         statusMessage = nil
     }
@@ -149,21 +154,31 @@ final class SFTPConnection {
         await load(path: parent.isEmpty ? "/" : parent, showLoading: true)
     }
 
-    /// Driven by the terminal's OSC 7 cwd-follow — `path` is already absolute.
-    /// Remembers the path always, but only navigates when "Follow Terminal" is on.
+    /// Driven by the terminal's reported cwd (window title, or OSC 7 when the
+    /// remote has its own shell integration). Remembers the path always, but
+    /// only navigates when "Follow Terminal" is on.
     func navigateToAbsolutePath(_ path: String) async {
-        lastTerminalPath = path
-        guard followTerminal, client != nil, path != currentPath else { return }
-        await load(path: path, showLoading: false)
+        guard let resolved = expandingTilde(path) else { return }
+        lastTerminalPath = resolved
+        guard followTerminal, client != nil, resolved != currentPath else { return }
+        await load(path: resolved, showLoading: false)
+    }
+
+    /// Titles report the home directory as "~" (`${PWD/#$HOME/~}`), which only
+    /// the remote knows how to expand — the login directory the session landed
+    /// in IS that home, so use it. Returns nil while it's still unknown.
+    private func expandingTilde(_ path: String) -> String? {
+        guard path.hasPrefix("~") else { return path }
+        guard let home = homePath else { return nil }
+        if path == "~" { return home }
+        let suffix = path.dropFirst(2) // "~/"
+        return home.hasSuffix("/") ? home + suffix : home + "/" + suffix
     }
 
     /// Toggled by the browser's "Follow Terminal" checkbox. Turning it on jumps
     /// to the terminal's last-known directory right away.
     func setFollowTerminal(_ on: Bool) {
         followTerminal = on
-        // Turning this on is what makes the terminal install its cwd-reporting
-        // shell hook (kept off by default so login output stays clean).
-        CwdFollowCenter.shared.setEnabled(on)
         if on, let path = lastTerminalPath, path != currentPath, client != nil {
             Task { await load(path: path, showLoading: false) }
         }
@@ -245,6 +260,8 @@ final class SFTPConnection {
                     if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
                     return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
                 }
+            // The first resolve is of ".", i.e. where we logged in = home.
+            if homePath == nil { homePath = resolved }
             currentPath = resolved
             errorMessage = nil
         } catch {
