@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Add/edit form for a saved Host. Secrets (password / key passphrase) are
 /// read from and written to the Keychain directly — never held in the
@@ -28,6 +29,7 @@ struct HostEditorView: View {
     @State private var folderID: UUID?
     @State private var notes: String
     @State private var vncSharedClipboard: Bool
+    @State private var isChoosingKeyFile = false
 
     init(store: SessionStore, folderID: UUID? = nil, editingHost: Host? = nil) {
         self.store = store
@@ -122,7 +124,7 @@ struct HostEditorView: View {
                     case .privateKey:
                         HStack {
                             TextField("Key path", text: $keyPath)
-                            Button("Choose…") { chooseKeyFile() }
+                            Button("Choose…") { isChoosingKeyFile = true }
                         }
                         SecureField("Passphrase (optional)", text: $passphrase)
                     case .agent:
@@ -171,6 +173,15 @@ struct HostEditorView: View {
         .formStyle(.grouped)
         .frame(minWidth: 420, minHeight: 480)
         .onAppear(perform: loadSecrets)
+        // SwiftUI-owned file picker — see applyChosenKey for why this must not
+        // be a hand-rolled NSOpenPanel.
+        .fileImporter(isPresented: $isChoosingKeyFile,
+                      allowedContentTypes: [.item],
+                      onCompletion: applyChosenKey)
+        // Keys live in ~/.ssh, which is hidden.
+        .fileDialogDefaultDirectory(
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".ssh"))
+        .fileDialogBrowserOptions(.includeHiddenFiles)
         .safeAreaInset(edge: .bottom) {
             HStack {
                 Spacer()
@@ -218,13 +229,22 @@ struct HostEditorView: View {
         }
     }
 
-    private func chooseKeyFile() {
-        let panel = NSOpenPanel()
-        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".ssh")
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK, let url = panel.url {
+    /// The key picker MUST NOT be a hand-rolled NSOpenPanel.
+    ///
+    /// Running `NSOpenPanel.runModal()` from inside this view — which is itself
+    /// presented as a SwiftUI `.sheet` — leaves the panel's out-of-process
+    /// `NSRemoteView` (ViewBridge) attached to the sheet's window. Presenting
+    /// the sheet again a few hosts later made that stale remote view throw from
+    /// `-[NSRemoteView containingWindowWillOrderOnScreen:]`, inside SwiftUI's
+    /// SheetBridge. AppKit swallowed the exception, so the app kept running with
+    /// its sidebar view graph broken: no sheets, no delete confirmation, no
+    /// working "+" menu and no folder expand/collapse until relaunch.
+    ///
+    /// `.fileImporter` is SwiftUI's own presentation, coordinated with the sheet
+    /// machinery instead of fighting it. (Proven by the crash report from
+    /// v1.2.2 with NSApplicationCrashOnExceptions enabled.)
+    private func applyChosenKey(_ result: Result<URL, Error>) {
+        if case .success(let url) = result {
             keyPath = url.path
         }
     }
