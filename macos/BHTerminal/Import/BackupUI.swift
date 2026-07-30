@@ -29,29 +29,50 @@ enum BackupUI {
             : "Saves your hosts, folders and snippets plus saved passwords, encrypted with the passphrase you entered."
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
-        do {
-            let data = try BackupArchive.export(store: store,
-                                                includeSecrets: choice.passphrase != nil,
-                                                passphrase: choice.passphrase)
-            // 0600: even encrypted, this file is the crown jewels — don't leave
-            // it group/world readable.
-            try data.write(to: url, options: .atomic)
-            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        let payload = BackupArchive.snapshot(store: store)
+        let counts = (hosts: store.hosts.count, folders: store.folders.count, snippets: store.snippets.count)
+        let includeSecrets = choice.passphrase != nil
+        let passphrase = choice.passphrase
 
-            alert(style: .informational, title: "Backup saved",
-                  message: """
-                  \(store.hosts.count) host\(store.hosts.count == 1 ? "" : "s"), \
-                  \(store.folders.count) folder\(store.folders.count == 1 ? "" : "s") and \
-                  \(store.snippets.count) snippet\(store.snippets.count == 1 ? "" : "s") \
-                  written to “\(url.lastPathComponent)”.
+        // Off the main thread: reading the secrets can raise a Keychain
+        // authorization prompt, and waiting for that on the main thread froze
+        // the whole app ("Application Not Responding") part-way through.
+        Task {
+            do {
+                let result = try await Task.detached(priority: .userInitiated) {
+                    try BackupArchive.makeArchive(payload: payload,
+                                                  includeSecrets: includeSecrets,
+                                                  passphrase: passphrase)
+                }.value
 
-                  \(choice.passphrase == nil
-                      ? "Passwords and key passphrases were not included — you'll re-enter those after restoring."
-                      : "Saved passwords are included and encrypted. Keep the passphrase safe: without it this backup can't be restored.")
-                  """)
-        } catch {
-            alert(style: .warning, title: "Export failed",
-                  message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+                // 0600: even encrypted, this file is the crown jewels — don't
+                // leave it group/world readable.
+                try result.data.write(to: url, options: .atomic)
+                try? FileManager.default.setAttributes([.posixPermissions: 0o600],
+                                                       ofItemAtPath: url.path)
+
+                let secretsNote: String
+                if !includeSecrets {
+                    secretsNote = "Passwords and key passphrases were not included — you'll re-enter those after restoring."
+                } else if result.secretsIncluded == 0 {
+                    secretsNote = "⚠️ No saved passwords made it in — the Keychain requests were declined. The hosts themselves are safely backed up; export again and choose “Always Allow” to include passwords."
+                } else {
+                    secretsNote = "\(result.secretsIncluded) saved password\(result.secretsIncluded == 1 ? "" : "s") included, encrypted. Keep the passphrase safe: without it this backup can't be restored."
+                }
+
+                alert(style: .informational, title: "Backup saved",
+                      message: """
+                      \(counts.hosts) host\(counts.hosts == 1 ? "" : "s"), \
+                      \(counts.folders) folder\(counts.folders == 1 ? "" : "s") and \
+                      \(counts.snippets) snippet\(counts.snippets == 1 ? "" : "s") \
+                      written to “\(url.lastPathComponent)”.
+
+                      \(secretsNote)
+                      """)
+            } catch {
+                alert(style: .warning, title: "Export failed",
+                      message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            }
         }
     }
 
@@ -67,6 +88,8 @@ enum BackupUI {
         Your \(hostCount) host\(hostCount == 1 ? "" : "s"), folders and snippets are always included.
 
         Saved passwords and key passphrases live in your Keychain. They can be included so a restore is complete, but only in an encrypted backup — enter a passphrase to protect it.
+
+        macOS will ask permission to read them: choose “Always Allow”. (BHTerminal isn't notarized by Apple, so macOS re-asks after each update.)
         """
         let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
         field.placeholderString = "Passphrase for the backup"

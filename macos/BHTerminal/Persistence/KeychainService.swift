@@ -70,6 +70,44 @@ enum KeychainService {
         }
     }
 
+    /// Every stored secret in ONE query, keyed by account.
+    ///
+    /// Backing up used to call `read(account:)` once per account — with 16
+    /// hosts that's 32 separate Keychain requests, each able to raise its own
+    /// authorization prompt, which is why exporting turned into an endless
+    /// stream of password dialogs. One query is the fewest requests possible.
+    ///
+    /// Items the user declines are simply absent from the result; the caller
+    /// reports how many it actually got rather than pretending it has them all.
+    static func readAll() throws -> [String: String] {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecReturnData as String: true,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll
+        ]
+
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        switch status {
+        case errSecSuccess:
+            guard let entries = item as? [[String: Any]] else { return [:] }
+            var secrets: [String: String] = [:]
+            for entry in entries {
+                guard let account = entry[kSecAttrAccount as String] as? String,
+                      let data = entry[kSecValueData as String] as? Data,
+                      let secret = String(data: data, encoding: .utf8) else { continue }
+                secrets[account] = secret
+            }
+            return secrets
+        case errSecItemNotFound:
+            return [:]
+        default:
+            throw KeychainError.unexpectedStatus(status)
+        }
+    }
+
     static func delete(account: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,

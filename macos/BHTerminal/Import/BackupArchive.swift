@@ -68,26 +68,43 @@ enum BackupArchive {
 
     // MARK: - Writing
 
-    /// `passphrase` is required when `includeSecrets` is true, and is what the
-    /// whole payload is encrypted under.
-    static func export(store: SessionStore,
-                       includeSecrets: Bool,
-                       passphrase: String?) throws -> Data {
-        var payload = Payload(folders: store.folders, hosts: store.hosts, snippets: store.snippets)
+    struct ExportResult {
+        let data: Data
+        /// How many secrets actually made it in — the user can decline the
+        /// Keychain prompt for any of them, and a backup that quietly contained
+        /// fewer passwords than the user believes would be worse than useless.
+        let secretsIncluded: Int
+    }
+
+    /// The parts that need the store, on the main actor. Cheap — no Keychain.
+    @MainActor
+    static func snapshot(store: SessionStore) -> Payload {
+        Payload(folders: store.folders, hosts: store.hosts, snippets: store.snippets)
+    }
+
+    /// Keychain reads + key derivation + encryption. Call this OFF the main
+    /// thread: reading the secrets can raise an authorization prompt, and
+    /// blocking the main thread on it made the whole app show "Application Not
+    /// Responding" mid-export. PBKDF2 is deliberately slow too.
+    nonisolated static func makeArchive(payload: Payload,
+                                        includeSecrets: Bool,
+                                        passphrase: String?) throws -> ExportResult {
+        var payload = payload
 
         if includeSecrets {
-            var secrets: [String: String] = [:]
-            for host in store.hosts {
-                for account in [host.keychainAccount, host.passphraseAccount] {
-                    if let secret = try? KeychainService.read(account: account), !secret.isEmpty {
-                        secrets[account] = secret
-                    }
-                }
-            }
-            payload.secrets = secrets
+            // ONE Keychain query for everything (see KeychainService.readAll) —
+            // one request per secret meant one prompt per secret.
+            let stored = (try? KeychainService.readAll()) ?? [:]
+            let wanted = Set(payload.hosts.flatMap {
+                [Host.keychainAccount(for: $0.id), Host.passphraseAccount(for: $0.id)]
+            })
+            // Only secrets belonging to hosts in this backup — never stale ones
+            // left behind by deleted hosts.
+            payload.secrets = stored.filter { wanted.contains($0.key) && !$0.value.isEmpty }
         }
 
-        return try encode(payload: payload, encrypt: includeSecrets, passphrase: passphrase)
+        let data = try encode(payload: payload, encrypt: includeSecrets, passphrase: passphrase)
+        return ExportResult(data: data, secretsIncluded: payload.secrets?.count ?? 0)
     }
 
     /// Encoding split out from gathering so it can be tested without a live
