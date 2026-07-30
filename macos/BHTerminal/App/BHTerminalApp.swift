@@ -27,6 +27,14 @@ struct BHTerminalApp: App {
                     SessionImportUI.run(into: store)
                 }
                 .keyboardShortcut("i", modifiers: [.command, .shift])
+                Divider()
+                Button("Export Backup…") {
+                    BackupUI.export(from: store)
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                Button("Restore from Backup…") {
+                    BackupUI.restore(into: store)
+                }
             }
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") {

@@ -16,6 +16,7 @@
 		205E4008AA98E66AF624BFE1 /* WorkspaceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6462B81C835F24911564F8C /* WorkspaceModel.swift */; };
 		269E7BE490CA9F626FD31493 /* BHTerminalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C82D151204B7B999D3C92A5 /* BHTerminalApp.swift */; };
 		2D78DA46759E0F470C29A578 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AD69599D8DDCD5F13DDA483 /* AppTheme.swift */; };
+		32F64ECBADE7A3F9E1B2ECD7 /* BackupArchiveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 825C9EB55C66CC33CE0D1F79 /* BackupArchiveTests.swift */; };
 		339991C514E317889F3D6FF0 /* SFTPEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F42C99D948D0CFFA1DCFA0 /* SFTPEntry.swift */; };
 		35D04ACAE9A17D63A28B3F72 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65F1224F0B9822AC4F40AA0F /* SessionStore.swift */; };
 		3771208B8D8FE7954BBC1F05 /* TerminalContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 368F1D4B3844EB20B853F4F3 /* TerminalContainerView.swift */; };
@@ -39,6 +40,7 @@
 		717E1B5042EAC89316D4094B /* TunnelManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5F4E6B506526BBDBD66F922 /* TunnelManagerView.swift */; };
 		71A30963BF449FFF7AEF23C8 /* SplitPaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 734CD1FCEBEBD76ECF167776 /* SplitPaneView.swift */; };
 		771440F5B0ED4D104F7C05E0 /* RoyalVNCKit in Frameworks */ = {isa = PBXBuildFile; productRef = FFE85CF989F97FFCCC43C2D8 /* RoyalVNCKit */; };
+		7822114E7939B296F3020DA4 /* BackupArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = E02DD573767F751DE9E2E968 /* BackupArchive.swift */; };
 		78CDAA8C1223A4983B949FC1 /* SFTPProtocolClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C2914B89C42B1E2260AAF18 /* SFTPProtocolClient.swift */; };
 		7C84BBDEB1AB7B184200696D /* SFTPBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3279E9877A3A79188FB8FBD /* SFTPBrowserView.swift */; };
 		889774B8062B1CB945FC7406 /* SFTPProtocolClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D264103AF3FB8AFF518A18B5 /* SFTPProtocolClientTests.swift */; };
@@ -66,6 +68,7 @@
 		DCD7510A367AB7D9BF94BD86 /* TunnelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 447021535C27DD401EDA45BB /* TunnelManager.swift */; };
 		DDC26469562B1BCB091DBF5A /* TerminalSessionRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F66B744C28A47D660D50937 /* TerminalSessionRegistry.swift */; };
 		DDE2D8244CAB1CF881B9AAE9 /* SessionSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D53A696D70413EF1FF2B4685 /* SessionSidebarView.swift */; };
+		EB6D7FCDC7334208EA0C19D7 /* BackupUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FD9FA3B6852C53D2483BAB3 /* BackupUI.swift */; };
 		FB0F340C391B1E13955E0D1C /* MobaXtermPasswordsImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4188080326D12E3488A73512 /* MobaXtermPasswordsImporter.swift */; };
 /* End PBXBuildFile section */
 
@@ -103,6 +106,7 @@
 		1DF0A62857959D9E34FE8A1E /* MobaXtermImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobaXtermImporter.swift; sourceTree = "<group>"; };
 		233EE32C80FF71A9A809E407 /* BHTerminal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BHTerminal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		245290FE53435B80EF4456E3 /* PTYSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PTYSession.swift; sourceTree = "<group>"; };
+		2FD9FA3B6852C53D2483BAB3 /* BackupUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupUI.swift; sourceTree = "<group>"; };
 		368F1D4B3844EB20B853F4F3 /* TerminalContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalContainerView.swift; sourceTree = "<group>"; };
 		3C3404C664412168DAE7FD10 /* TerminalTitleCwdTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalTitleCwdTests.swift; sourceTree = "<group>"; };
 		3D88711143EEEF7E67663D1F /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
@@ -130,6 +134,7 @@
 		774008621F83060192E6A888 /* SSHArgvBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHArgvBuilderTests.swift; sourceTree = "<group>"; };
 		78FA04E05AF45CFBD82EA5D2 /* TerminalTitleCwd.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalTitleCwd.swift; sourceTree = "<group>"; };
 		7EF971029C79893A95B2807F /* SessionTreeItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionTreeItem.swift; sourceTree = "<group>"; };
+		825C9EB55C66CC33CE0D1F79 /* BackupArchiveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupArchiveTests.swift; sourceTree = "<group>"; };
 		87040FD9F8C0CC1433C30A0D /* BHTerminalTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BHTerminalTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9268552BA16B48F621EFD030 /* LoginItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItem.swift; sourceTree = "<group>"; };
 		96BEEDB5B457081FBEDAA1AC /* SSHConfigImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHConfigImporter.swift; sourceTree = "<group>"; };
@@ -148,6 +153,7 @@
 		D264103AF3FB8AFF518A18B5 /* SFTPProtocolClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SFTPProtocolClientTests.swift; sourceTree = "<group>"; };
 		D53A696D70413EF1FF2B4685 /* SessionSidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionSidebarView.swift; sourceTree = "<group>"; };
 		DB56A467A7C3880BBA61AEF4 /* SessionImportUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionImportUI.swift; sourceTree = "<group>"; };
+		E02DD573767F751DE9E2E968 /* BackupArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupArchive.swift; sourceTree = "<group>"; };
 		E0CE6DACEF067A630E3AA6F0 /* TunnelArgvBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelArgvBuilderTests.swift; sourceTree = "<group>"; };
 		EEFFB5EF6C39829603712850 /* HostBackwardCompatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostBackwardCompatTests.swift; sourceTree = "<group>"; };
 		F46FE7B065300E6D7D8D4197 /* SFTPSessionRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SFTPSessionRegistry.swift; sourceTree = "<group>"; };
@@ -246,6 +252,8 @@
 		869413B8504E0A79F39A3F9F /* Import */ = {
 			isa = PBXGroup;
 			children = (
+				E02DD573767F751DE9E2E968 /* BackupArchive.swift */,
+				2FD9FA3B6852C53D2483BAB3 /* BackupUI.swift */,
 				1DF0A62857959D9E34FE8A1E /* MobaXtermImporter.swift */,
 				4188080326D12E3488A73512 /* MobaXtermPasswordsImporter.swift */,
 				C90E87953A11E66B65798A12 /* SessionImport.swift */,
@@ -258,6 +266,7 @@
 		B70F0FD1D9152E4BC48829A1 /* BHTerminalTests */ = {
 			isa = PBXGroup;
 			children = (
+				825C9EB55C66CC33CE0D1F79 /* BackupArchiveTests.swift */,
 				F8D5BC5CE3351E46E132163A /* BHTerminalTests.swift */,
 				EEFFB5EF6C39829603712850 /* HostBackwardCompatTests.swift */,
 				13C1D4D21139E190A2A464EF /* KeychainServiceTests.swift */,
@@ -426,6 +435,8 @@
 				5F18B60ADE6B325BBAF1E303 /* AppSettings.swift in Sources */,
 				2D78DA46759E0F470C29A578 /* AppTheme.swift in Sources */,
 				269E7BE490CA9F626FD31493 /* BHTerminalApp.swift in Sources */,
+				7822114E7939B296F3020DA4 /* BackupArchive.swift in Sources */,
+				EB6D7FCDC7334208EA0C19D7 /* BackupUI.swift in Sources */,
 				414B64E8599D79F8AB26290D /* Host.swift in Sources */,
 				D9AB14F77F92246E3D4EE370 /* HostEditorView.swift in Sources */,
 				7087DF2B690586C2518D41F6 /* HostFolder.swift in Sources */,
@@ -473,6 +484,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D43D3AC0FA06E7B5BC87950A /* BHTerminalTests.swift in Sources */,
+				32F64ECBADE7A3F9E1B2ECD7 /* BackupArchiveTests.swift in Sources */,
 				5FC10AC6821070107990AE57 /* HostBackwardCompatTests.swift in Sources */,
 				53C43679EBBDC97290CF0357 /* KeychainServiceTests.swift in Sources */,
 				18984FE8DD8CE4554AFD5DF2 /* OSC7Tests.swift in Sources */,
@@ -583,7 +595,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.3;
+				MARKETING_VERSION = 1.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.biswashost.BHTerminal;
 				PRODUCT_NAME = BHTerminal;
 				SDKROOT = macosx;
@@ -689,7 +701,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.3;
+				MARKETING_VERSION = 1.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.biswashost.BHTerminal;
 				PRODUCT_NAME = BHTerminal;
 				SDKROOT = macosx;

@@ -35,6 +35,10 @@ and see [`macos/README.md`](macos/README.md).
 - **Built-in updater** — checks GitHub Releases automatically (can be turned off) or on
   demand from **Preferences ▸ Updates** / **BHTerminal ▸ Check for Updates…**, then installs
   the new version for you.
+- **Backup & restore** — **File ▸ Export Backup…** writes every host, folder and snippet to a
+  single file; saved passwords can be included, and are then encrypted (AES-GCM, PBKDF2) under
+  a passphrase you choose. **File ▸ Restore from Backup…** merges it back without deleting
+  anything you've added since.
 - **Secure by design** — secrets only in the OS keychain, host-key verification, argument-injection hardened.
 
 ## How it works — one spec, native shells
