@@ -6,6 +6,7 @@ import AppKit
 /// app. Re-opening from the menu bar restores the Dock icon + window.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppDelegate.installExceptionLogging()
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(windowWillClose(_:)),
@@ -38,6 +39,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AppActivation.foreground()
         }
         return true
+    }
+
+    /// Records uncaught exceptions to a log file.
+    ///
+    /// AppKit swallows exceptions raised during event handling: the app keeps
+    /// running but whatever was mid-update is left broken (that's how the
+    /// sidebar came to ignore every click until relaunch, with nothing to show
+    /// for it afterwards). This at least leaves evidence next time — it is a
+    /// diagnostic, not a fix, and AppKit-swallowed exceptions may not reach it.
+    private static func installExceptionLogging() {
+        NSSetUncaughtExceptionHandler { exception in
+            let log = """
+            [\(ISO8601DateFormatter().string(from: Date()))] \
+            \(exception.name.rawValue): \(exception.reason ?? "no reason")
+            \(exception.callStackSymbols.joined(separator: "\n"))
+
+            """
+            let dir = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Logs/BHTerminal", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let file = dir.appendingPathComponent("exceptions.log")
+            if let handle = try? FileHandle(forWritingTo: file) {
+                handle.seekToEndOfFile()
+                handle.write(Data(log.utf8))
+                try? handle.close()
+            } else {
+                try? log.write(to: file, atomically: true, encoding: .utf8)
+            }
+        }
     }
 
     @objc private func windowWillClose(_ note: Notification) {

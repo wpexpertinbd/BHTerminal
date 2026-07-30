@@ -78,24 +78,22 @@ struct SessionSidebarView: View {
             }
             .listStyle(.sidebar)
             .searchable(text: $searchText, placement: .sidebar, prompt: "Quick connect / filter")
-            // Right-click menus are per-row (folderRow / hostRow). This modifier
-            // is here purely for its primaryAction: double-click a host to
-            // connect, while single-click still selects/highlights the row.
-            .contextMenu(forSelectionType: UUID.self) { _ in
-            } primaryAction: { ids in
-                if let id = ids.first, let host = store.hosts.first(where: { $0.id == id }) {
-                    onConnect(host)
-                }
-            }
+            // NOTE: deliberately NOT using .contextMenu(forSelectionType:) here.
+            // Layering that on a List whose rows already have their own
+            // .contextMenu — and whose content is an OutlineGroup — left the
+            // sidebar's SwiftUI updates wedged after a few edits: sheets, the
+            // delete confirmation and even folder expand/collapse silently
+            // stopped responding (only relaunching fixed it). Double-click to
+            // connect is handled per-row instead (see hostRow).
         }
         .toolbar {
             ToolbarItem {
                 Menu {
                     Button("New Host…", systemImage: "plus") {
-                        sheetTarget = .newHost(folderID: nil)
+                        present(.newHost(folderID: nil))
                     }
                     Button("New Folder…", systemImage: "folder.badge.plus") {
-                        sheetTarget = .newFolder(parentID: nil)
+                        present(.newFolder(parentID: nil))
                     }
                     Divider()
                     Button("Import Sessions…", systemImage: "square.and.arrow.down") {
@@ -106,7 +104,7 @@ struct SessionSidebarView: View {
                 }
             }
         }
-        .sheet(item: $sheetTarget) { target in
+        .sheet(item: $sheetTarget, onDismiss: { sheetTarget = nil }) { target in
             sheetContent(for: target)
         }
         .confirmationDialog(
@@ -117,6 +115,42 @@ struct SessionSidebarView: View {
             Button("Delete", role: .destructive) { performPendingDeletion() }
             Button("Cancel", role: .cancel) {}
         }
+    }
+
+    // MARK: - Presentation (self-healing)
+
+    /// Every sheet goes through here instead of assigning `sheetTarget` directly.
+    ///
+    /// `.sheet(item:)` ignores a new value while it believes one is presented, and
+    /// dismissal is driven by the child's `@Environment(\.dismiss)` — so a single
+    /// lost dismissal left `sheetTarget` set forever and silently killed EVERY
+    /// later sheet AND the delete confirmation (the reported "sidebar menu stops
+    /// responding after adding a few hosts"; only relaunching, which resets
+    /// @State, brought it back).
+    ///
+    /// The recovery is safe by construction: a sheet is modal to its window, so
+    /// if the user was able to trigger this at all, nothing is actually on
+    /// screen and any leftover value is stale. Clear it, then present on the
+    /// next tick so SwiftUI sees a real nil→value transition.
+    private func present(_ target: SheetTarget) {
+        guard sheetTarget != nil || pendingDeletion != nil else {
+            sheetTarget = target
+            return
+        }
+        sheetTarget = nil
+        pendingDeletion = nil
+        DispatchQueue.main.async { sheetTarget = target }
+    }
+
+    /// Same reasoning for the delete confirmation.
+    private func requestDeletion(_ target: DeletionTarget) {
+        guard sheetTarget != nil || pendingDeletion != nil else {
+            pendingDeletion = target
+            return
+        }
+        sheetTarget = nil
+        pendingDeletion = nil
+        DispatchQueue.main.async { pendingDeletion = target }
     }
 
     private var deletionMessage: String {
@@ -143,17 +177,17 @@ struct SessionSidebarView: View {
         Label(folder.name, systemImage: "folder")
             .contextMenu {
                 Button("New Host Here…", systemImage: "plus") {
-                    sheetTarget = .newHost(folderID: folder.id)
+                    present(.newHost(folderID: folder.id))
                 }
                 Button("New Subfolder…", systemImage: "folder.badge.plus") {
-                    sheetTarget = .newFolder(parentID: folder.id)
+                    present(.newFolder(parentID: folder.id))
                 }
                 Divider()
                 Button("Rename…", systemImage: "pencil") {
-                    sheetTarget = .renameFolder(folder)
+                    present(.renameFolder(folder))
                 }
                 Button("Delete", systemImage: "trash", role: .destructive) {
-                    pendingDeletion = .folder(folder)
+                    requestDeletion(.folder(folder))
                 }
             }
     }
@@ -181,18 +215,21 @@ struct SessionSidebarView: View {
         }
         .tag(host.id)
         .contentShape(Rectangle())
-        // No tap gesture here — one would swallow the single click and kill the
-        // List's selection highlight (so you couldn't tell what you'd picked).
-        // Double-click-to-connect is handled by the List's primaryAction below.
+        // Double-click connects; the single-click case sets the selection
+        // explicitly, because a tap gesture on the row would otherwise swallow
+        // the click the List uses to highlight it. Order matters: the count: 2
+        // gesture has to come first to get a chance to match.
+        .onTapGesture(count: 2) { onConnect(host) }
+        .onTapGesture { selection = host.id }
         .contextMenu {
             Button("Connect", systemImage: "bolt.fill") { onConnect(host) }
             Divider()
-            Button("Edit…", systemImage: "pencil") { sheetTarget = .editHost(host) }
+            Button("Edit…", systemImage: "pencil") { present(.editHost(host)) }
             Button("Duplicate", systemImage: "plus.square.on.square") { duplicate(host) }
-            Button("Tunnels…", systemImage: "arrow.left.arrow.right") { sheetTarget = .tunnels(host) }
+            Button("Tunnels…", systemImage: "arrow.left.arrow.right") { present(.tunnels(host)) }
             Divider()
             Button("Delete", systemImage: "trash", role: .destructive) {
-                pendingDeletion = .host(host)
+                requestDeletion(.host(host))
             }
         }
     }
