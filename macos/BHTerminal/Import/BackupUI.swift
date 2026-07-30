@@ -89,7 +89,7 @@ enum BackupUI {
 
         Saved passwords and key passphrases live in your Keychain. They can be included so a restore is complete, but only in an encrypted backup — enter a passphrase to protect it.
 
-        macOS will ask permission to read them: choose “Always Allow”. (BHTerminal isn't notarized by Apple, so macOS re-asks after each update.)
+        macOS will ask permission to read them — choose “Always Allow”. Passwords saved by an older version are moved into a single protected entry the first time, so this export may ask once per password; after that it's one prompt.
         """
         let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
         field.placeholderString = "Passphrase for the backup"
