@@ -213,7 +213,12 @@ struct SessionSidebarView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .tag(host.id)
+        // Deliberately NO .tag() here. Inside an OutlineGroup the row's identity
+        // comes from the data (SessionTreeItem.id), so an explicit tag competes
+        // with it — which is why folder rows (untagged) highlighted correctly
+        // while host rows (tagged) didn't, and is the identity conflict that was
+        // throwing inside SwiftUI's update and leaving the whole sidebar unable
+        // to re-render (dead menus, sheets and expand/collapse until relaunch).
         .contentShape(Rectangle())
         // Double-click connects; the single-click case sets the selection
         // explicitly, because a tap gesture on the row would otherwise swallow
