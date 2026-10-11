@@ -1,0 +1,53 @@
+name: Bug report
+description: Something doesn't work
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please include the version — most "can't connect"
+        reports turn out to be fixed in a newer build, and without it we can't tell.
+  - type: input
+    id: version
+    attributes:
+      label: BHTerminal version
+      description: BHTerminal ▸ About, or the installer filename.
+      placeholder: "1.3.2"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "macOS 26 (Apple silicon) / Windows 11 / Ubuntu 24.04"
+    validations:
+      required: true
+  - type: dropdown
+    id: auth
+    attributes:
+      label: How does the host sign in?
+      options:
+        - Password
+        - Private key (with passphrase)
+        - Private key (no passphrase)
+        - SSH agent
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens?
+      description: |
+        What does the terminal pane show — an error, a prompt, or nothing at all?
+        Copy the text if there is any.
+    validations:
+      required: true
+  - type: textarea
+    id: cli
+    attributes:
+      label: Does plain ssh work from Terminal?
+      description: |
+        Run the same connection in Terminal/PowerShell, e.g. `ssh -p 22 user@host`.
+        This tells us instantly whether it's BHTerminal or the server/network.
+      placeholder: "e.g. works fine / Permission denied (publickey) / times out"

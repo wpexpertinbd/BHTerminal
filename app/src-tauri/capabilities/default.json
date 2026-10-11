@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Core permissions for the main window plus the native file sheets used by backup export/restore and key selection. NOTE: this file does NOT bound what BHTerminal's own commands can do — they spawn ssh and read/write the session store through Rust, and are callable by any script in this webview. What contains that is the strict CSP in tauri.conf.json, the fact that no remote content is ever loaded, and the ssh argument allow-list in bhterm-core. See SECURITY.md.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "dialog:allow-confirm",
+    "opener:allow-open-url"
+  ]
+}

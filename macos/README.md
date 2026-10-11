@@ -57,8 +57,10 @@ approve it once:
    *"BHTerminal was blocked…"* message, and click **Open Anyway**.
 3. Confirm with Touch ID / your password. BHTerminal opens and won't ask again.
 
-*(On the `.pkg`, if the installer refuses to open, right-click it in Finder →
-**Open** → **Open**.)*
+*(The `.pkg` behaves the same way: double-click it, click **Done** on the
+"Move to Trash" dialog, then **Open Anyway** in Privacy & Security. Right-click
+→ Open does **not** work for this on current macOS, despite what a lot of
+guides still say.)*
 
 You can verify the signature yourself in Terminal:
 

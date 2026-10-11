@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or idea
+    url: https://github.com/wpexpertinbd/BHTerminal/discussions
+    about: For anything that isn't a bug.
