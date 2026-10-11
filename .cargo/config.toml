@@ -1,0 +1,7 @@
+[build]
+# Spotlight and Launchpad skip any folder whose name ends in `.noindex`, and a
+# bundled dev build is a real .app — without this it shows up in search and the
+# launcher as a SECOND BHTerminal alongside the installed one. (A
+# `.metadata_never_index` file inside an ordinary folder does not achieve this;
+# the suffix does.)
+target-dir = "target.noindex"
