@@ -95,3 +95,38 @@ body {
   padding: 6px 12px; background: #fff8e6; border-top: 1px solid #ffe2a8;
   color: #7a5b00; font-size: 12px;
 }
+
+/* ── SFTP file pane ─────────────────────────────────────────────────────── */
+.files {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 320px;
+  background: #fbfbfc; border-left: 1px solid var(--line);
+  display: flex; flex-direction: column; font-size: 12px;
+}
+.files-bar { display: flex; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--line); align-items: center; }
+.files-bar button { border: 1px solid var(--line); background: #fff; border-radius: 5px; cursor: pointer; padding: 2px 7px; }
+.files-bar button:disabled { opacity: .4; cursor: default; }
+.spin { margin-left: auto; color: var(--muted); }
+.files-path {
+  padding: 4px 8px; color: var(--muted); font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  direction: rtl; text-align: left; border-bottom: 1px solid var(--line);
+}
+.files-list { flex: 1; overflow: auto; }
+.files-status { padding: 10px; color: var(--muted); }
+.frow { display: flex; align-items: center; gap: 6px; padding: 3px 8px; cursor: default; }
+.frow:hover { background: rgba(0,0,0,.05); }
+.frow.selected { background: var(--accent); color: #fff; }
+.frow.selected .fsize { color: rgba(255,255,255,.85); }
+.ficon { width: 16px; }
+.fname { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fsize { color: var(--muted); font-size: 11px; }
+.fact { display: none; gap: 2px; }
+.frow:hover .fact { display: flex; }
+.fact button { border: 0; background: transparent; cursor: pointer; font-size: 11px; }
+.files-follow {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 8px; border-top: 1px solid var(--line); color: var(--muted);
+}
+/* The terminal only gives up the width when a file pane is actually there —
+   a local-shell tab has none and should use the whole window. */
+.panes.with-files .term-host { right: 320px; }

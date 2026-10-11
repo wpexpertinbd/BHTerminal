@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Host, type HostFolder, type Workspace } from "./api";
 import { TerminalPane } from "./TerminalPane";
+import { FilePane } from "./FilePane";
 
 interface Pane {
   key: string;
@@ -13,6 +14,22 @@ interface Pane {
 
 let paneSeq = 0;
 
+/** Mirrors bhterm_core::title::parse_title — only something unambiguously a
+ *  path is accepted, so ordinary titles ("vim foo", "htop") are ignored, and
+ *  a path containing a colon is skipped rather than mis-split. */
+function parseTitlePath(title: string): string | null {
+  const t = title.trim();
+  if (!t) return null;
+  const i = t.lastIndexOf(":");
+  const candidate = (i >= 0 ? t.slice(i + 1) : t).trim();
+  const looksLikePath =
+    candidate === "~" || candidate.startsWith("~/") || candidate.startsWith("/");
+  if (!looksLikePath) return null;
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f\x7f]/.test(candidate)) return null;
+  return candidate;
+}
+
 export default function App() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +37,9 @@ export default function App() {
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  /** Latest cwd each host's terminal reported through its window title. */
+  const [cwdByHost, setCwdByHost] = useState<Record<string, string>>({});
+  const [followTerminal, setFollowTerminal] = useState(false);
 
   useEffect(() => {
     api.loadWorkspace().then(setWorkspace).catch((e) => setError(String(e)));
@@ -121,6 +141,13 @@ export default function App() {
 
   const active = panes.find((p) => p.key === activeKey) ?? null;
 
+  // SFTP rides the terminal's connection, so drop sessions whose host has no
+  // tab left open.
+  useEffect(() => {
+    const keep = Array.from(new Set(panes.map((p) => p.hostId).filter(Boolean) as string[]));
+    api.sftpPrune(keep).catch(() => {});
+  }, [panes]);
+
   return (
     <div className="app">
       <aside className="sidebar">
@@ -165,7 +192,7 @@ export default function App() {
           ))}
         </div>
 
-        <div className="panes">
+        <div className={`panes ${active?.hostId && !active.exited ? "with-files" : ""}`}>
           {panes.length === 0 && (
             <div className="placeholder">Double-click a host to connect</div>
           )}
@@ -183,12 +210,27 @@ export default function App() {
                   prev.map((q) => (q.key === key ? { ...q, exited: true, title: `${q.title} — exited${code !== null ? ` (${code})` : ""}` } : q))
                 )
               }
-              onTitle={(key, title) =>
-                setPanes((prev) => prev.map((q) => (q.key === key && !q.exited ? { ...q, title } : q)))
-              }
+              onTitle={(key, title) => {
+                setPanes((prev) => prev.map((q) => (q.key === key && !q.exited ? { ...q, title } : q)));
+                // Distro shells publish the working directory in the title on
+                // every prompt, which is why cwd-follow needs nothing injected
+                // into the user's session.
+                const path = parseTitlePath(title);
+                if (path && p.hostId) setCwdByHost((m) => ({ ...m, [p.hostId!]: path }));
+              }}
             />
           ))}
         </div>
+
+        {active?.hostId && !active.exited && (
+          <FilePane
+            key={active.hostId}
+            hostId={active.hostId}
+            terminalCwd={cwdByHost[active.hostId] ?? null}
+            follow={followTerminal}
+            onFollowChange={setFollowTerminal}
+          />
+        )}
 
         {active?.exited && (
           <div className="banner">

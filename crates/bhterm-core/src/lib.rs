@@ -10,6 +10,7 @@ pub mod backup;
 pub mod crypto;
 pub mod model;
 pub mod secrets;
+pub mod sftp;
 pub mod ssh;
 pub mod store;
 pub mod title;

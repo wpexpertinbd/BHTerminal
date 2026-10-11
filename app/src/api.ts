@@ -60,6 +60,22 @@ function encodeChunk(text: string): string {
   return btoa(bin);
 }
 
+export interface SftpEntry {
+  name: string;
+  isDir: boolean;
+  isSymlink: boolean;
+  size: number | null;
+  permissions: number | null;
+  mtime: number | null;
+}
+
+export interface Listing {
+  path: string;
+  /** The directory the session logged into — what a title's "~" expands against. */
+  home: string;
+  entries: SftpEntry[];
+}
+
 export const api = {
   loadWorkspace: () => invoke<Workspace>("load_workspace"),
   saveWorkspace: (store: SessionStore) => invoke<void>("save_workspace", { store }),
@@ -77,6 +93,39 @@ export const api = {
     invoke<void>("resize_terminal", { paneId, cols, rows }),
 
   close: (paneId: string) => invoke<void>("close_terminal", { paneId }),
+
+  sftpConnect: (hostId: string) => invoke<Listing>("sftp_connect", { hostId }),
+  sftpList: (hostId: string, path: string) => invoke<Listing>("sftp_list", { hostId, path }),
+  sftpMkdir: (hostId: string, path: string, name: string) =>
+    invoke<void>("sftp_mkdir", { hostId, path, name }),
+  sftpRename: (hostId: string, from: string, to: string) =>
+    invoke<void>("sftp_rename", { hostId, from, to }),
+  sftpDelete: (hostId: string, path: string, isDir: boolean) =>
+    invoke<void>("sftp_delete", { hostId, path, isDir }),
+  sftpDownload: (hostId: string, remote: string, local: string) =>
+    invoke<number>("sftp_download", { hostId, remote, local }),
+  sftpUpload: (hostId: string, local: string, remoteDir: string) =>
+    invoke<number>("sftp_upload", { hostId, local, remoteDir }),
+  sftpPrune: (keep: string[]) => invoke<void>("sftp_prune", { keep }),
 };
+
+/** Remote paths are always "/"-separated whatever the local platform is. */
+export function remoteJoin(base: string, name: string): string {
+  return base.endsWith("/") ? base + name : `${base}/${name}`;
+}
+
+export function remoteParent(path: string): string {
+  const trimmed = path.replace(/\/+$/, "");
+  const i = trimmed.lastIndexOf("/");
+  return i <= 0 ? "/" : trimmed.slice(0, i);
+}
+
+export function formatSize(bytes: number | null): string {
+  if (bytes === null) return "";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = bytes, u = 0;
+  while (v >= 1024 && u < units.length - 1) { v /= 1024; u++; }
+  return `${u === 0 ? v : v.toFixed(1)} ${units[u]}`;
+}
 
 export { Channel };

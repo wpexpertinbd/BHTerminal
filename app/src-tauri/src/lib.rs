@@ -5,12 +5,15 @@
 #[allow(dead_code)]
 mod paths;
 mod pty;
+mod sftp_session;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use bhterm_core::{ssh, SessionStore};
 use pty::{PtyEvent, PtyRegistry, SharedRegistry};
+use sftp_session::{Listing, SftpRegistry, SharedSftp};
 use serde::Serialize;
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::ipc::Channel;
 use tauri::Manager;
 use uuid::Uuid;
@@ -130,14 +133,149 @@ fn default_shell() -> (String, Vec<String>) {
     }
 }
 
+
+// ── SFTP ───────────────────────────────────────────────────────────────────
+
+/// Builds the SFTP argv for a host and opens (or reuses) its session.
+///
+/// Blocking work — the handshake and the retry window both wait on the
+/// network — so it runs off the UI thread.
+#[tauri::command]
+async fn sftp_connect(
+    sftp: tauri::State<'_, SharedSftp>,
+    host_id: String,
+) -> Result<Listing, String> {
+    let id: Uuid = host_id.parse().map_err(|_| "bad host id".to_string())?;
+    let store = SessionStore::load(&paths::sessions_file().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let host = store.host(id).ok_or("no such host")?.clone();
+    let jump = ssh::resolve_jump(&store.hosts, host.jump_host_id).cloned();
+    let socket_dir = paths::control_socket_dir().map_err(|e| e.to_string())?;
+    let cm = ssh::ControlMaster { socket_dir: &socket_dir };
+    let args = ssh::build_sftp(&host, jump.as_ref(), Some(&cm)).map_err(|e| e.to_string())?;
+
+    let sftp = sftp.inner().clone();
+    let key = host_id.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        // 45s: long enough to cover someone typing a key passphrase into the
+        // terminal next door, which is what the master is waiting on.
+        sftp.connect(key.clone(), ssh_program(), &args, Duration::from_secs(45))?;
+        sftp.list(&key, ".")
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn sftp_list(
+    sftp: tauri::State<'_, SharedSftp>,
+    host_id: String,
+    path: String,
+) -> Result<Listing, String> {
+    let sftp = sftp.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || sftp.list(&host_id, &path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn sftp_mkdir(
+    sftp: tauri::State<'_, SharedSftp>,
+    host_id: String,
+    path: String,
+    name: String,
+) -> Result<(), String> {
+    let sftp = sftp.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || sftp.mkdir(&host_id, &sftp_session::join(&path, &name)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn sftp_rename(
+    sftp: tauri::State<'_, SharedSftp>,
+    host_id: String,
+    from: String,
+    to: String,
+) -> Result<(), String> {
+    let sftp = sftp.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || sftp.rename(&host_id, &from, &to))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn sftp_delete(
+    sftp: tauri::State<'_, SharedSftp>,
+    host_id: String,
+    path: String,
+    is_dir: bool,
+) -> Result<(), String> {
+    let sftp = sftp.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || sftp.delete(&host_id, &path, is_dir))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn sftp_download(
+    sftp: tauri::State<'_, SharedSftp>,
+    host_id: String,
+    remote: String,
+    local: String,
+) -> Result<u64, String> {
+    let sftp = sftp.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        sftp.download(&host_id, &remote, std::path::Path::new(&local))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn sftp_upload(
+    sftp: tauri::State<'_, SharedSftp>,
+    host_id: String,
+    local: String,
+    remote_dir: String,
+) -> Result<u64, String> {
+    let sftp = sftp.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = std::path::Path::new(&local);
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or("that file has no name")?
+            .to_string();
+        sftp.upload(&host_id, path, &sftp_session::join(&remote_dir, &name))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// SFTP rides the terminal's connection, so a host with no terminal tab left
+/// open has no business holding one. The UI reports which hosts are still
+/// open whenever its tabs change.
+#[tauri::command]
+fn sftp_prune(sftp: tauri::State<'_, SharedSftp>, keep: Vec<String>) {
+    sftp.prune(&keep);
+}
+
+#[tauri::command]
+fn sftp_disconnect(sftp: tauri::State<'_, SharedSftp>, host_id: String) {
+    sftp.disconnect(&host_id);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let registry: SharedRegistry = Arc::new(PtyRegistry::default());
+    let sftp: SharedSftp = Arc::new(SftpRegistry::default());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(registry.clone())
+        .manage(sftp.clone())
         .invoke_handler(tauri::generate_handler![
             load_workspace,
             save_workspace,
@@ -147,6 +285,15 @@ pub fn run() {
             resize_terminal,
             close_terminal,
             terminal_is_running,
+            sftp_connect,
+            sftp_list,
+            sftp_mkdir,
+            sftp_rename,
+            sftp_delete,
+            sftp_download,
+            sftp_upload,
+            sftp_disconnect,
+            sftp_prune,
         ])
         .on_window_event(move |window, event| {
             // Every pane is a child ssh process; leaving them behind would
@@ -154,6 +301,7 @@ pub fn run() {
             if let tauri::WindowEvent::Destroyed = event {
                 if window.webview_windows().len() <= 1 {
                     registry.close_all();
+                    sftp.disconnect_all();
                 }
             }
         })
