@@ -100,13 +100,14 @@ jobs:
           set -euo pipefail
           # `mapfile` does not exist in the bash 3.2 that ships with macOS.
           files=()
-          while IFS= read -r f; do files+=("$f"); done < <(find target.noindex target -type f \
+          while IFS= read -r f; do files+=("$f"); done < <(find . -type f \
             \( -name '*.dmg' -o -name '*-setup.exe' -o -name '*.deb' -o -name '*.rpm' \) \
-            -not -name '*.sig' 2>/dev/null | sort)
+            -not -path './app/node_modules/*' -not -name '*.sig' | sort)
 
           if [ ${#files[@]} -eq 0 ]; then
             echo "::error::no installers were produced"
-            find target.noindex target -maxdepth 5 -type d -name bundle -exec find {} -type f \; 2>/dev/null | head -40
+            find . -type d -name bundle -not -path './app/node_modules/*' \
+              -exec find {} -type f \; | head -40
             exit 1
           fi
 
@@ -142,6 +143,14 @@ jobs:
                     --json assets -q '.assets | length' 2>/dev/null || echo 0)
           if [ "$count" -lt 1 ]; then
             echo "::warning::$KEEP has no assets — keeping the older releases"
+            exit 0
+          fi
+          # A draft is not downloadable. Pruning now would remove the release
+          # people are actually using and replace it with nothing.
+          draft=$(gh release view "$KEEP" --repo "$GITHUB_REPOSITORY" \
+                    --json isDraft -q '.isDraft' 2>/dev/null || echo true)
+          if [ "$draft" != "false" ]; then
+            echo "::notice::$KEEP is still a draft — keeping the older releases until it is published"
             exit 0
           fi
 
