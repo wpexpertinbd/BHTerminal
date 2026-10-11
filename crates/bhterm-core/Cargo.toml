@@ -1,0 +1,29 @@
+[package]
+name = "bhterm-core"
+description = "Portable core for BHTerminal: session store, ssh argv + safety, secret vault, backup archive, importers."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+# No `tauri`, no UI, and no platform discovery: the shell injects the config
+# directory and the ssh control-socket directory rather than the core guessing
+# them. This crate is the part that compiles unchanged on macOS, Windows and
+# Linux. See CLAUDE.md.
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+# Backup + secret vault crypto. Same scheme the shipped macOS app uses, so
+# archives stay readable across the rewrite: AES-GCM under a PBKDF2 key.
+aes-gcm = "0.10"
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
+hmac = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+base64 = "0.22"
+
+[dev-dependencies]
+tempfile = "3"

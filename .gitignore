@@ -11,3 +11,6 @@ xcuserdata/
 *.xcuserstate
 build/dd/
 dist/
+
+# Rust build output
+/target/
