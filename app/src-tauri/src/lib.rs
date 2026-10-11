@@ -6,11 +6,13 @@
 mod paths;
 mod pty;
 mod sftp_session;
+mod vnc_bridge;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use bhterm_core::{ssh, SessionStore};
 use pty::{PtyEvent, PtyRegistry, SharedRegistry};
 use sftp_session::{Listing, SftpRegistry, SharedSftp};
+use vnc_bridge::{SharedVnc, VncBridge};
 use serde::Serialize;
 use std::sync::Arc;
 use std::time::Duration;
@@ -266,16 +268,42 @@ fn sftp_disconnect(sftp: tauri::State<'_, SharedSftp>, host_id: String) {
     sftp.disconnect(&host_id);
 }
 
+// ── VNC ────────────────────────────────────────────────────────────────────
+
+/// Returns a one-shot ws:// URL for this host's VNC server.
+///
+/// The webview never names a target: it presents a token that was registered
+/// here against one specific host:port, so the bridge cannot be talked into
+/// connecting anywhere else.
+#[tauri::command]
+async fn vnc_prepare(
+    vnc: tauri::State<'_, SharedVnc>,
+    host_id: String,
+) -> Result<String, String> {
+    let id: Uuid = host_id.parse().map_err(|_| "bad host id".to_string())?;
+    let store = SessionStore::load(&paths::sessions_file().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let host = store.host(id).ok_or("no such host")?.clone();
+    // The same allow-list the ssh argv uses: refuse a weird hostname rather
+    // than hand it to a socket.
+    if !ssh::is_valid_hostname(&host.hostname) {
+        return Err(format!("“{}” is not a valid hostname", host.hostname));
+    }
+    vnc.prepare(host.hostname.clone(), host.port).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let registry: SharedRegistry = Arc::new(PtyRegistry::default());
     let sftp: SharedSftp = Arc::new(SftpRegistry::default());
+    let vnc: SharedVnc = Arc::new(VncBridge::default());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(registry.clone())
         .manage(sftp.clone())
+        .manage(vnc)
         .invoke_handler(tauri::generate_handler![
             load_workspace,
             save_workspace,
@@ -294,6 +322,7 @@ pub fn run() {
             sftp_upload,
             sftp_disconnect,
             sftp_prune,
+            vnc_prepare,
         ])
         .on_window_event(move |window, event| {
             // Every pane is a child ssh process; leaving them behind would

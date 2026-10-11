@@ -247,6 +247,6 @@ pub fn build_exit_master(
 }
 
 /// Resolve a jump host out of a host list, for callers holding a flat store.
-pub fn resolve_jump<'a>(hosts: &'a [Host], id: Option<Uuid>) -> Option<&'a Host> {
+pub fn resolve_jump(hosts: &[Host], id: Option<Uuid>) -> Option<&Host> {
     id.and_then(|id| hosts.iter().find(|h| h.id == id))
 }

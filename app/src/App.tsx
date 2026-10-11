@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type Host, type HostFolder, type Workspace } from "./api";
 import { TerminalPane } from "./TerminalPane";
 import { FilePane } from "./FilePane";
+import { VncPane } from "./VncPane";
 
 interface Pane {
   key: string;
+  kind: "terminal" | "vnc";
   hostId: string | null;
   title: string;
   /** Set when ssh exits unexpectedly: the tab stays so it can be reconnected,
@@ -71,13 +73,19 @@ export default function App() {
       setActiveKey(existing.key);
       return;
     }
-    const pane: Pane = { key: `pane-${++paneSeq}`, hostId: host.id, title: host.name, exited: false };
+    const pane: Pane = {
+      key: `pane-${++paneSeq}`,
+      kind: host.connectionType === "vnc" ? "vnc" : "terminal",
+      hostId: host.id,
+      title: host.name,
+      exited: false,
+    };
     setPanes((p) => [...p, pane]);
     setActiveKey(pane.key);
   }
 
   function openLocalShell() {
-    const pane: Pane = { key: `pane-${++paneSeq}`, hostId: null, title: "Local shell", exited: false };
+    const pane: Pane = { key: `pane-${++paneSeq}`, kind: "terminal", hostId: null, title: "Local shell", exited: false };
     setPanes((p) => [...p, pane]);
     setActiveKey(pane.key);
   }
@@ -192,13 +200,21 @@ export default function App() {
           ))}
         </div>
 
-        <div className={`panes ${active?.hostId && !active.exited ? "with-files" : ""}`}>
+        <div className={`panes ${active?.hostId && active.kind === "terminal" && !active.exited ? "with-files" : ""}`}>
           {panes.length === 0 && (
             <div className="placeholder">Double-click a host to connect</div>
           )}
           {/* Every pane stays mounted. Rendering only the active one would
               dispose the others' terminals and lose their scrollback. */}
-          {panes.map((p) => (
+          {panes.map((p) =>
+            p.kind === "vnc" && p.hostId ? (
+              <VncPane
+                key={p.key}
+                hostId={p.hostId}
+                hostName={p.title}
+                active={p.key === activeKey}
+              />
+            ) : (
             <TerminalPane
               key={p.key}
               paneKey={p.key}
@@ -219,10 +235,11 @@ export default function App() {
                 if (path && p.hostId) setCwdByHost((m) => ({ ...m, [p.hostId!]: path }));
               }}
             />
-          ))}
+            )
+          )}
         </div>
 
-        {active?.hostId && !active.exited && (
+        {active?.hostId && active.kind === "terminal" && !active.exited && (
           <FilePane
             key={active.hostId}
             hostId={active.hostId}

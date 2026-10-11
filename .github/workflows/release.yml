@@ -1,0 +1,154 @@
+name: Release
+
+# Builds every installer for a tag and attaches them to its release, so the
+# in-app updater has something to find. Every release must keep a .pkg-equivalent
+# asset per platform and a vX.Y.Z tag — the updater matches on both.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.optional || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: macOS (Apple silicon)
+            target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin --bundles dmg
+          - os: macos-latest
+            name: macOS (Intel)
+            target: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin --bundles dmg
+          # NSIS only — no .msi. The .msi caused problems on BHNotepad, and a
+          # single self-contained setup.exe is what BH apps ship.
+          - os: windows-latest
+            name: Windows (x64)
+            target: ""
+            args: --bundles nsis
+            optional: true
+          # Windows on ARM (Snapdragon X, Parallels on Apple silicon). Built
+          # by cross-compiling from the x64 runner, the same way the macOS
+          # Intel build runs on an Apple-silicon runner.
+          - os: windows-latest
+            name: Windows (ARM64)
+            target: aarch64-pc-windows-msvc
+            args: --target aarch64-pc-windows-msvc --bundles nsis
+            optional: true
+          - os: ubuntu-latest
+            name: Linux (x86_64)
+            target: ""
+            # .deb and .rpm are a few megabytes; an AppImage is ~76 MB because
+            # it carries its own GTK and WebKit. Not worth it for the same app.
+            args: --bundles deb,rpm
+            optional: true
+          # A Linux VM on an Apple-silicon Mac is arm64, and an amd64 package
+          # simply refuses to install there. arm64 runners are free for public
+          # repositories.
+          - os: ubuntu-24.04-arm
+            name: Linux (arm64)
+            target: ""
+            args: --bundles deb,rpm
+            optional: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # Cross-built targets have to be installed explicitly.
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Linux build dependencies
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf \
+            build-essential curl wget file libxdo-dev libssl-dev
+
+      - run: npm ci
+        working-directory: app
+
+      - name: Build
+        working-directory: app
+        env:
+          # Ad-hoc sign DURING bundling, before the disk image is made.
+          # Signing afterwards is too late, and an unsigned build is reported
+          # by macOS as "damaged" rather than merely unverified.
+          APPLE_SIGNING_IDENTITY: ${{ matrix.os == 'macos-latest' && '-' || '' }}
+        run: npm run tauri build -- ${{ matrix.args }}
+
+      - name: Attach installers to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # `mapfile` does not exist in the bash 3.2 that ships with macOS.
+          files=()
+          while IFS= read -r f; do files+=("$f"); done < <(find target.noindex target -type f \
+            \( -name '*.dmg' -o -name '*-setup.exe' -o -name '*.deb' -o -name '*.rpm' \) \
+            -not -name '*.sig' 2>/dev/null | sort)
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::no installers were produced"
+            find target.noindex target -maxdepth 5 -type d -name bundle -exec find {} -type f \; 2>/dev/null | head -40
+            exit 1
+          fi
+
+          printf 'found:\n'; printf '  %s\n' "${files[@]}"
+
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft \
+              --title "BHTerminal for macOS, Windows & Linux $TAG" \
+              --notes "macOS builds are ad-hoc signed, not notarised. On first launch open the app, click Done on the warning, then System Settings → Privacy & Security → Open Anyway." \
+              || true
+          fi
+          gh release upload "$TAG" "${files[@]}" --clobber
+
+  # Only the newest release is kept, so the releases page never accumulates
+  # builds nobody should download — and the updater only ever has one answer.
+  prune:
+    name: Remove older releases
+    needs: build
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Delete every release but the newest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # ⚠️ Never prune unless the new release actually has installers on
+          # it. Deleting the old ones after a failed build would leave nothing
+          # to download at all.
+          count=$(gh release view "$KEEP" --repo "$GITHUB_REPOSITORY" \
+                    --json assets -q '.assets | length' 2>/dev/null || echo 0)
+          if [ "$count" -lt 1 ]; then
+            echo "::warning::$KEEP has no assets — keeping the older releases"
+            exit 0
+          fi
+
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 \
+            --json tagName -q '.[].tagName' \
+          | while read -r tag; do
+              [ "$tag" = "$KEEP" ] && continue
+              echo "removing $tag"
+              gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+            done

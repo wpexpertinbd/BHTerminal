@@ -107,6 +107,8 @@ export const api = {
   sftpUpload: (hostId: string, local: string, remoteDir: string) =>
     invoke<number>("sftp_upload", { hostId, local, remoteDir }),
   sftpPrune: (keep: string[]) => invoke<void>("sftp_prune", { keep }),
+
+  vncPrepare: (hostId: string) => invoke<string>("vnc_prepare", { hostId }),
 };
 
 /** Remote paths are always "/"-separated whatever the local platform is. */

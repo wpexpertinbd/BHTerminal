@@ -131,8 +131,10 @@ impl SecretVault {
     }
 }
 
-/// 0600. Encrypted or not, this file is the crown jewels — it must not be
-/// readable by other accounts on the machine.
+/// Restricts the file to its owner (mode 0600). Encrypted or not, this is the
+/// crown jewels — it must not be readable by other accounts on the machine.
+/// On Windows there is no portable chmod; the user-profile ACL already
+/// restricts it to the owner.
 fn restrict_to_owner(path: &Path) -> Result<(), VaultError> {
     #[cfg(unix)]
     {

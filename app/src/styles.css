@@ -130,3 +130,12 @@ body {
 /* The terminal only gives up the width when a file pane is actually there —
    a local-shell tab has none and should use the whole window. */
 .panes.with-files .term-host { right: 320px; }
+
+/* ── VNC ────────────────────────────────────────────────────────────────── */
+.vnc { position: absolute; inset: 0; background: #101013; }
+.vnc-canvas { position: absolute; inset: 0; }
+.vnc-status {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 2; background: rgba(0,0,0,.72); color: #fff;
+  padding: 6px 12px; border-radius: 6px; font-size: 12px;
+}

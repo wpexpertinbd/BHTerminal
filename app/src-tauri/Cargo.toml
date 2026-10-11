@@ -27,3 +27,11 @@ serde_json.workspace = true
 dirs.workspace = true
 uuid.workspace = true
 base64 = "0.22"
+# The VNC bridge. A VNC server speaks raw TCP and a webview can only open a
+# WebSocket, so this is the adapter between them — the same job websockify
+# does. Tauri already brings tokio, so the marginal cost is small, and the
+# async split() is what makes a clean bidirectional pump possible.
+tokio = { version = "1", features = ["net", "io-util", "rt", "time", "macros"] }
+tokio-tungstenite = "0.28"
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+rand = "0.8"

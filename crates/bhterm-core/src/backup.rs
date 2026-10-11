@@ -135,7 +135,7 @@ pub fn encode(
         envelope.data = Some(payload);
     }
 
-    serde_json::to_vec_pretty(&envelope).map_err(|_| BackupError::NotABackup.into())
+    serde_json::to_vec_pretty(&envelope).map_err(|_| BackupError::NotABackup)
 }
 
 fn parse(bytes: &[u8]) -> Result<Envelope, BackupError> {
