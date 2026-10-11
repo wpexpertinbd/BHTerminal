@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/bhterm-core"]
+members = ["crates/bhterm-core", "app/src-tauri"]
 
 [workspace.package]
 version = "2.0.0"

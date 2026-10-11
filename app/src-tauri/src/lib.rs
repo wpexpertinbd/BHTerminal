@@ -2,6 +2,7 @@
 //! Everything portable lives in `bhterm-core`; this file is the part that
 //! talks to the OS and the webview.
 
+#[allow(dead_code)]
 mod paths;
 mod pty;
 
@@ -57,7 +58,9 @@ fn open_terminal(
     let args = ssh::build_terminal(&host, jump.as_ref(), Some(&cm)).map_err(|e| e.to_string())?;
 
     let pane_id = Uuid::new_v4().to_string();
-    registry.spawn(pane_id.clone(), ssh_program(), &args, cols, rows, on_event)?;
+    registry.spawn(pane_id.clone(), ssh_program(), &args, cols, rows, move |e| {
+        on_event.send(e).is_ok()
+    })?;
     Ok(pane_id)
 }
 
@@ -71,7 +74,9 @@ fn open_local_shell(
 ) -> Result<String, String> {
     let pane_id = Uuid::new_v4().to_string();
     let (program, args) = default_shell();
-    registry.spawn(pane_id.clone(), &program, &args, cols, rows, on_event)?;
+    registry.spawn(pane_id.clone(), &program, &args, cols, rows, move |e| {
+        on_event.send(e).is_ok()
+    })?;
     Ok(pane_id)
 }
 

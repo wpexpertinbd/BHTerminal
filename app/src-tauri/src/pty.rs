@@ -13,7 +13,6 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
-use tauri::ipc::Channel;
 
 #[derive(Clone, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -22,8 +21,8 @@ pub enum PtyEvent {
     /// can straddle two reads, and decoding half of one would corrupt the
     /// stream. The webview decodes and hands xterm.js the bytes.
     Output { data: String },
-    /// A clean logout (0) closes the tab; anything else kept it open with a
-    /// Reconnect button in the Swift build, and should here too.
+    /// A clean logout (0) closes the tab; anything else keeps it open with a
+    /// Reconnect button, as the Swift build learned to do.
     Exit { code: Option<i32> },
 }
 
@@ -39,6 +38,10 @@ pub struct PtyRegistry {
 }
 
 impl PtyRegistry {
+    /// `on_event` returns false when the receiver has gone away, which stops
+    /// the reader thread. Taking a plain callback rather than a Tauri Channel
+    /// keeps this testable without a running app — the command layer wraps the
+    /// Channel.
     pub fn spawn(
         &self,
         id: String,
@@ -46,7 +49,7 @@ impl PtyRegistry {
         args: &[String],
         cols: u16,
         rows: u16,
-        on_event: Channel<PtyEvent>,
+        on_event: impl Fn(PtyEvent) -> bool + Send + 'static,
     ) -> Result<(), String> {
         let pty = native_pty_system();
         let pair = pty
@@ -95,15 +98,14 @@ impl PtyRegistry {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
-                        let msg = PtyEvent::Output { data: B64.encode(&buf[..n]) };
-                        if on_event.send(msg).is_err() {
-                            break; // the webview went away
+                        if !on_event(PtyEvent::Output { data: B64.encode(&buf[..n]) }) {
+                            break; // the receiver went away
                         }
                     }
                     Err(_) => break,
                 }
             }
-            let _ = on_event.send(PtyEvent::Exit { code: None });
+            on_event(PtyEvent::Exit { code: None });
         });
 
         Ok(())
@@ -147,3 +149,68 @@ impl PtyRegistry {
 }
 
 pub type SharedRegistry = Arc<PtyRegistry>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base64::Engine;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    /// Proves the pty round-trip end to end: a child is spawned, its output
+    /// reaches the callback as bytes, and EOF produces an Exit. If this
+    /// breaks, every terminal in the app is dead.
+    #[test]
+    fn spawns_a_command_and_streams_its_output() {
+        let registry = PtyRegistry::default();
+        let (tx, rx) = mpsc::channel::<PtyEvent>();
+
+        registry
+            .spawn(
+                "t1".into(),
+                "/bin/sh",
+                &["-c".to_string(), "echo hello-from-pty".to_string()],
+                80,
+                24,
+                move |e| tx.send(e).is_ok(),
+            )
+            .expect("spawn");
+
+        let mut seen = String::new();
+        let mut exited = false;
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while std::time::Instant::now() < deadline {
+            match rx.recv_timeout(Duration::from_millis(500)) {
+                Ok(PtyEvent::Output { data }) => {
+                    let bytes = B64.decode(&data).expect("valid base64");
+                    seen.push_str(&String::from_utf8_lossy(&bytes));
+                }
+                Ok(PtyEvent::Exit { .. }) => {
+                    exited = true;
+                    break;
+                }
+                Err(_) => break,
+            }
+        }
+
+        assert!(seen.contains("hello-from-pty"), "got: {seen:?}");
+        assert!(exited, "the reader must report EOF when the child exits");
+        registry.close("t1");
+    }
+
+    #[test]
+    fn a_closed_session_is_gone_and_writing_to_it_fails() {
+        let registry = PtyRegistry::default();
+        registry
+            .spawn("t2".into(), "/bin/sh", &["-c".into(), "sleep 30".into()], 80, 24, |_| true)
+            .expect("spawn");
+        assert!(registry.is_running("t2"));
+
+        registry.close("t2");
+        assert!(!registry.is_running("t2"));
+        // Closing is the only thing that ends a session, and once closed the
+        // id must not silently accept input.
+        assert!(registry.write("t2", b"x").is_err());
+        assert!(registry.resize("t2", 100, 30).is_err());
+    }
+}
