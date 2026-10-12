@@ -1,31 +1,22 @@
-# BHTerminal — Windows port
+# BHTerminal on Windows
 
-> **Status: planned.** Placeholder.
+**This shipped.** Windows is no longer a planned port: since **v2.0.0** the app
+is built from one source for macOS, Windows and Linux — a Rust core in
+[`../crates/bhterm-core`](../crates/bhterm-core) and a Tauri shell in
+[`../app`](../app) — so there is no separate Windows tree to write.
 
-A native Windows build of BHTerminal — the same MobaXterm-style workspace
-(session tree + terminal + SFTP + VNC + tunnels) described in
-[`../docs/PORTING.md`](../docs/PORTING.md), staying **config-compatible** with
-the macOS app.
+Download `BHTerminal_<version>_x64-setup.exe` (or `_arm64-setup.exe`) from the
+[latest release](https://github.com/wpexpertinbd/BHTerminal/releases/latest).
+There is deliberately no `.msi`.
 
-## Recommended shape
+## The one real difference on Windows
 
-- **Terminal:** spawn Windows OpenSSH (`ssh.exe`) over **ConPTY** — you inherit
-  the user's `~/.ssh/config`, agent, keys, and ProxyJump, same as the macOS app
-  reuses `/usr/bin/ssh`. Render with a native terminal control or `xterm.js`.
-- **SFTP:** [SSH.NET](https://github.com/sshnet/SSH.NET) (or `libssh2`) for the
-  structured file browser.
-- **VNC:** a native RFB client or [noVNC].
-- **Credentials:** Windows **Credential Manager** (DPAPI) — never the JSON config.
-- **Tray + launch-at-login:** `NotifyIcon` + Startup registration.
-- **UI framework:** WinUI 3 / WPF for a native feel, or Electron + xterm.js +
-  `ssh2` for the fastest shared-UI route.
+Windows OpenSSH does not implement connection sharing (`ControlMaster`), so the
+file browser opens its own SSH connection instead of riding the terminal's
+login. A saved password is filled in for you, so it stays invisible — but the
+app tells you this is happening rather than behaving differently in silence.
+The single switch for it is `ssh::multiplexing_supported()` in the core.
 
-## Where to start
-
-1. Read [`../docs/PORTING.md`](../docs/PORTING.md) (the feature + security
-   contract) and §5 in particular — the argument-injection and known-hosts rules
-   are **mandatory**.
-2. Port the headless core first (data model, credential store, argv builder +
-   validator, import parsers) with tests — translate from
-   [`../macos/BHTerminal/`](../macos/BHTerminal/).
-3. Then wire the terminal (ConPTY), SFTP, VNC, tunnels, and the tray.
+What this folder used to hold — the spec and the security rules a port had to
+meet — lives in [`../docs/PORTING.md`](../docs/PORTING.md), which is still the
+contract for the behaviour.

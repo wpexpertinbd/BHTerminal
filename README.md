@@ -12,62 +12,85 @@
 
 ## Platforms
 
-| OS | What it is | Status | Folder |
-|----|-----------|--------|--------|
-| 🍎 **macOS** | Native SwiftUI/AppKit app — SSH terminal (tabs + split panes), SFTP browser, VNC, tunnels, menu-bar mode. Signed `.dmg`/`.pkg`. | ✅ **shipping v1.0.0** | [`macos/`](macos/) |
-| 🪟 **Windows** | Native shell (ConPTY + `ssh.exe`, SFTP, VNC) over the same feature spec | ⬜ planned | [`windows/`](windows/) |
-| 🐧 **Linux** | Native shell (VTE/GTK, `ssh` in a pty, SFTP, VNC) | ⬜ planned | [`linux/`](linux/) |
+Since **v2.0.0** all three are built from one source — a Rust core, a Tauri
+shell, and your system's own `ssh` — so a feature lands everywhere at once.
 
-**macOS users:** grab the latest `.dmg`/`.pkg` from the
-[**latest release**](https://github.com/wpexpertinbd/BHTerminal/releases/latest)
-and see [`macos/README.md`](macos/README.md).
+| OS | Download | Notes |
+|----|----------|-------|
+| 🍎 **macOS** | `BHTerminal_<version>_aarch64.dmg` (Apple silicon) · `_x64.dmg` (Intel) | Ad-hoc signed, not notarised — see [first launch](#first-launch-on-macos) |
+| 🪟 **Windows** | `BHTerminal_<version>_x64-setup.exe` · `_arm64-setup.exe` | Installer only, no `.msi` |
+| 🐧 **Linux** | `.deb` and `.rpm`, `amd64`/`x86_64` and `arm64`/`aarch64` | WebKitGTK 4.1 |
+
+Everything is on the
+[**latest release**](https://github.com/wpexpertinbd/BHTerminal/releases/latest).
+
+The original **macOS-only Swift app** lives on in [`macos/`](macos/). It is the
+reference the Rust version was ported from, and is no longer the shipping build.
 
 ## Features
 
-- **Sessions sidebar** — folders + hosts, quick-connect filter, double-click to connect.
+- **Sessions sidebar** — folders and hosts, double-click to connect.
 - **Real SSH terminal** — runs your system `ssh`, so `~/.ssh/config`, the agent,
-  `ProxyJump`, and 2FA all work. Tabs + split panes, broadcast-input, snippets, session logging.
-- **SFTP browser** — drag-and-drop transfer, and a path that **follows your terminal's directory**.
+  `ProxyJump` and 2FA all work. Tabs, **split panes**, **broadcast typing** to every pane in a
+  tab, snippets, and **session recording** to a file.
+- **SFTP browser** in the same tab, on the same login — with a path that
+  **follows your terminal's directory**, taken from the window title rather than
+  injected into your shell.
 - **VNC** remote desktops in the same tabbed window.
-- **SSH tunnels** — local / remote / dynamic, kept running in the background.
-- **Menu-bar mode** — close the window and it keeps running (tunnels stay up).
-- **Import from MobaXterm** (`.txt` passwords export or `.mxtsessions`) and `~/.ssh/config`.
-- **Built-in updater** — checks GitHub Releases automatically (can be turned off) or on
-  demand from **Preferences ▸ Updates** / **BHTerminal ▸ Check for Updates…**, then installs
-  the new version for you.
-- **Backup & restore** — **File ▸ Export Backup…** writes every host, folder and snippet to a
-  single file; saved passwords can be included, and are then encrypted (AES-GCM, PBKDF2) under
-  a passphrase you choose. **File ▸ Restore from Backup…** merges it back without deleting
-  anything you've added since.
-- **Secure by design** — secrets only in the OS keychain, host-key verification, argument-injection hardened.
+- **Port forwards** — local, remote and SOCKS, started per host with their live state.
+- **Saved passwords and key passphrases**, encrypted on your computer and typed in
+  for you when the server asks.
+- **Import from MobaXterm** — a `.mxtsessions` export, a plain `.mobaconf` or
+  `MobaXterm.ini`, and the stored-passwords export (which brings the passwords with it).
+  An OpenSSH `~/.ssh/config` works too.
+- **Backup and restore** — write every host, folder and snippet to one file, and merge
+  it back on another computer without deleting anything added since. This is how you move
+  a host list between the macOS, Windows and Linux builds. Saved passwords can be
+  included, and are then always encrypted (AES-GCM under PBKDF2) with a passphrase you choose.
+- **Update check** — finds the right installer for your machine and opens it in your
+  browser. It never downloads or runs anything itself; see [`SECURITY.md`](SECURITY.md).
+- **Secure by design** — host-key verification, an ssh argument allow-list, and imports
+  treated as untrusted input. Details in [`SECURITY.md`](SECURITY.md).
 
-## How it works — one spec, native shells
+## First launch on macOS
 
-A terminal client has no single portable core: SSH, SFTP, VNC, PTY, credential
-storage, and UI each want a different best-in-class library per OS. So the shared
-thing here isn't code — it's the **contract**:
+The app is signed, but **not notarised** — that needs a paid Apple account, and this
+is free software. Open it, click **Done** on the warning, then go to **System Settings
+▸ Privacy & Security** and click **Open Anyway**. You only do this once.
 
-- **[`docs/PORTING.md`](docs/PORTING.md)** — the OS-neutral spec: the feature set,
-  the config-compatible data model, and the **mandatory security rules** every
-  port must pass. **The contract.**
-- **[`macos/`](macos/)** — the reference implementation (Swift). Ports translate
-  its headless core (data model, credential store, argv validator, import
-  parsers) then wire a native shell.
+## How it works
 
-Every port stays **config-compatible** — the same `sessions.json` model — so your
-sessions move between platforms.
+One Rust core, one shell, three platforms:
 
-> Porting to a new OS? Read [`docs/PORTING.md`](docs/PORTING.md), build the
-> headless core first (with tests), then wire the terminal (`ssh` in a pty),
-> SFTP, VNC, tunnels, and the tray.
+- **[`crates/bhterm-core`](crates/bhterm-core)** — everything portable, and nothing
+  else: the data model, the ssh argument builder and its allow-list, an SFTP v3
+  client, the credential vault, the backup format, and the import parsers. No UI,
+  no Tauri, and no platform guessing — the shell passes in every path. It is where
+  the tests live.
+- **[`app/`](app)** — the Tauri shell (pty, SFTP sessions, the VNC bridge, the
+  vault, forwards) and a React front end with xterm.js and noVNC.
+- **[`macos/`](macos/)** — the original Swift app, kept as the reference it was
+  ported from.
+- **[`docs/PORTING.md`](docs/PORTING.md)** — the OS-neutral spec and the security
+  rules, written when each OS was going to get its own shell. Still the contract
+  for the behaviour, and worth reading before changing it.
+
+The terminal runs your system's `ssh` rather than a bundled SSH library, which is
+why your config, your agent, `ProxyJump` and 2FA simply work. The one real
+platform difference: **Windows OpenSSH has no connection sharing**, so there the
+file browser signs in separately instead of riding the terminal's login — the app
+says so rather than behaving differently in silence.
+
+The saved-session file is the same on every platform, so your sessions move
+between them.
 
 ## Repository layout
 ```
 .
-├── docs/PORTING.md   # shared spec + security contract for all ports
-├── macos/            # shipping macOS app (SwiftUI/AppKit) + installers
-├── windows/          # Windows port (planned)
-├── linux/            # Linux port (planned)
+├── crates/bhterm-core/  # portable Rust core (model, ssh, sftp, vault, import) + tests
+├── app/                 # Tauri shell (Rust) + React front end — the shipping app
+├── docs/PORTING.md      # the OS-neutral spec and security contract
+├── macos/               # the original Swift app, kept as reference
 ├── LICENSE           # MIT
 ├── SECURITY.md
 └── DISCLAIMER.md     # not affiliated with MobaXterm / Termius
