@@ -85,6 +85,15 @@ export function TransferSheet({ mode, onChanged, onClose }: Props) {
         : "No passwords were in this backup.",
       "Nothing was deleted — a restore only adds and updates.",
     ]);
+    setWarnings(
+      s.missingKeys.length > 0
+        ? [
+            `${s.missingKeys.length} host${s.missingKeys.length === 1 ? "" : "s"} use a private key file that is not on this computer. Copy the key over, or open the host and choose the key again:`,
+            ...s.missingKeys.slice(0, 10),
+            ...(s.missingKeys.length > 10 ? [`…and ${s.missingKeys.length - 10} more.`] : []),
+          ]
+        : []
+    );
   }
 
   async function pickImport() {

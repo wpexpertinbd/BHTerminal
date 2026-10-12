@@ -16,6 +16,7 @@ pub mod sftp;
 pub mod ssh;
 pub mod store;
 pub mod title;
+pub mod update;
 
 pub use model::{AuthMethod, ConnectionType, Host, HostFolder, Snippet, TreeItem, TunnelKind, TunnelRule};
 pub use secrets::SecretVault;

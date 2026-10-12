@@ -50,6 +50,12 @@ export interface RestoreSummary {
   secretsRestored: number;
 }
 
+export interface RestoreReport extends RestoreSummary {
+  /** Hosts whose key file isn't on this computer — expected when a backup
+   *  moves between machines, and worth saying before a connect fails. */
+  missingKeys: string[];
+}
+
 export interface ImportPreview {
   source: string;
   hosts: number;
@@ -63,6 +69,19 @@ export interface ImportResult {
   skipped: number;
   passwordsSaved: number;
   warnings: string[];
+}
+
+export interface UpdateQuery {
+  url: string;
+  currentVersion: string;
+  releasesPage: string;
+}
+
+export interface Available {
+  version: string;
+  downloadUrl: string | null;
+  downloadName: string | null;
+  pageUrl: string;
 }
 
 export type PtyEvent =
@@ -149,9 +168,15 @@ export const api = {
     invoke<number>("backup_export", { path, includeSecrets, passphrase }),
   backupIsEncrypted: (path: string) => invoke<boolean>("backup_is_encrypted", { path }),
   backupRestore: (path: string, passphrase: string | null) =>
-    invoke<RestoreSummary>("backup_restore", { path, passphrase }),
+    invoke<RestoreReport>("backup_restore", { path, passphrase }),
   importPreview: (path: string) => invoke<ImportPreview>("import_preview", { path }),
   importApply: (path: string) => invoke<ImportResult>("import_apply", { path }),
+
+  updateQuery: () => invoke<UpdateQuery>("update_query"),
+  /** null = nothing newer. A FAILED check throws, and must never be shown as
+   *  "up to date" — that hides the real state. */
+  updateEvaluate: (body: string) => invoke<Available | null>("update_evaluate", { body }),
+  updateOpen: (url: string) => invoke<void>("update_open", { url }),
 };
 
 /** Remote paths are always "/"-separated whatever the local platform is. */

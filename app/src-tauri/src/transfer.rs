@@ -97,12 +97,25 @@ pub fn backup_is_encrypted(path: String) -> Result<bool, String> {
 
 /// Merges a backup in. Nothing is deleted: restoring an old archive must not
 /// take away hosts added since it was made.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreReport {
+    #[serde(flatten)]
+    pub summary: backup::RestoreSummary,
+    /// Hosts whose private key file is not on THIS computer. A backup moved
+    /// between machines — the Mac build to the Windows one, most often —
+    /// carries the path it was saved with, and that path does not exist on
+    /// the other side. Saying so now beats a connection that fails later for
+    /// a reason nobody can see.
+    pub missing_keys: Vec<String>,
+}
+
 #[tauri::command]
 pub fn backup_restore(
     vault: tauri::State<'_, SharedVault>,
     path: String,
     passphrase: Option<String>,
-) -> Result<backup::RestoreSummary, String> {
+) -> Result<RestoreReport, String> {
     let bytes = std::fs::read(&path).map_err(|e| format!("could not read {path}: {e}"))?;
     let payload = backup::decode(&bytes, passphrase.as_deref()).map_err(|e| e.to_string())?;
 
@@ -112,7 +125,34 @@ pub fn backup_restore(
     // worse than one that failed outright.
     let summary = vault.mutate(|secrets| backup::restore(&payload, &mut store, Some(secrets)))?;
     save_store(&store)?;
-    Ok(summary)
+
+    let missing_keys = store
+        .hosts
+        .iter()
+        .filter_map(|h| match &h.auth_method {
+            bhterm_core::AuthMethod::PrivateKey { path } if !key_exists(path) => {
+                Some(format!("{} ({})", h.name, path))
+            }
+            _ => None,
+        })
+        .collect();
+    Ok(RestoreReport { summary, missing_keys })
+}
+
+/// `~` is the user's own home on whichever platform this is, so it is expanded
+/// before the file is looked for rather than treated as a literal directory.
+fn key_exists(path: &str) -> bool {
+    if path.is_empty() {
+        return false;
+    }
+    let expanded = match path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\")) {
+        Some(rest) => match dirs::home_dir() {
+            Some(home) => home.join(rest),
+            None => return false,
+        },
+        None => std::path::PathBuf::from(path),
+    };
+    expanded.exists()
 }
 
 #[derive(serde::Serialize)]

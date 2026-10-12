@@ -226,3 +226,16 @@ body {
 .warnings p { margin: 0 0 5px; }
 .warnings p:last-child { margin: 0; }
 /* END BHTERM-TRANSFER */
+
+/* BHTERM-UPDATE */
+.update {
+  border-top: 1px solid var(--line); padding: 9px 12px;
+  font-size: 12px; line-height: 1.4; background: #eef4ff;
+}
+.update-actions { display: flex; gap: 6px; margin-top: 7px; }
+.update-actions button {
+  font: inherit; font-size: 12px; padding: 4px 10px; border: 1px solid var(--line);
+  background: #fff; border-radius: 6px; cursor: pointer;
+}
+.update-actions .primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* END BHTERM-UPDATE */

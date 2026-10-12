@@ -7,6 +7,7 @@ mod paths;
 mod pty;
 mod sftp_session;
 mod transfer;
+mod updater;
 mod vault;
 mod vnc_bridge;
 
@@ -476,6 +477,9 @@ pub fn run() {
             transfer::backup_restore,
             transfer::import_preview,
             transfer::import_apply,
+            updater::update_query,
+            updater::update_evaluate,
+            updater::update_open,
         ])
         .on_window_event(move |window, event| {
             // Every pane is a child ssh process; leaving them behind would

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, blankHost, newId, type Host, type HostFolder, type Workspace } from "./api";
 import { HostEditor } from "./HostEditor";
 import { TransferSheet } from "./TransferSheet";
+import { useUpdateCheck } from "./useUpdateCheck";
 import { TerminalPane } from "./TerminalPane";
 import { FilePane } from "./FilePane";
 import { VncPane } from "./VncPane";
@@ -49,6 +50,8 @@ export default function App() {
   const [editing, setEditing] = useState<{ host: Host; isNew: boolean } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [transfer, setTransfer] = useState<"export" | "restore" | "import" | null>(null);
+  const [version, setVersion] = useState<string>("");
+  const update = useUpdateCheck(setVersion);
 
   useEffect(() => {
     api.loadWorkspace().then(setWorkspace).catch((e) => setError(String(e)));
@@ -303,6 +306,15 @@ export default function App() {
                 <button onClick={() => { setMenuOpen(false); setTransfer("restore"); }}>
                   Restore a backup…
                 </button>
+                <hr />
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    update.checkNow();
+                  }}
+                >
+                  {update.checking ? "Checking…" : "Check for updates"}
+                </button>
               </div>
             )}
           </div>
@@ -320,6 +332,28 @@ export default function App() {
             </div>
           )}
         </div>
+        {update.available && (
+          <div className="update">
+            <strong>BHTerminal {update.available.version} is out.</strong>
+            <div className="update-actions">
+              <button
+                className="primary"
+                onClick={() =>
+                  api
+                    .updateOpen(update.available!.downloadUrl ?? update.available!.pageUrl)
+                    .catch((e) => setError(String(e)))
+                }
+              >
+                {update.available.downloadUrl ? "Download" : "See the release"}
+              </button>
+              <button onClick={update.dismiss}>Later</button>
+            </div>
+          </div>
+        )}
+        {update.error && <div className="error">{update.error}</div>}
+        {update.upToDate && !update.available && (
+          <div className="note">BHTerminal {version} is the latest version.</div>
+        )}
         {workspace && !workspace.multiplexing && (
           <div className="note">
             Windows OpenSSH has no connection sharing, so the file browser signs in separately.

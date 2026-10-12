@@ -34,6 +34,39 @@ You'll get a response as soon as possible.
   VNC server could otherwise read or poison the local clipboard.
 - **Hardened Runtime** is enabled on release builds.
 
+## The update check and the webview's network reach
+
+The update check reads `https://api.github.com/repos/wpexpertinbd/BHTerminal/releases/latest`
+and nothing else. That one origin is named in `connect-src`, and it is the entire
+network reach of the webview: no remote content is ever loaded into it, and every
+other origin is refused by the CSP.
+
+The response is judged in Rust, not in the webview. The version comparison is
+numeric (so 1.10 is newer than 1.9), the installer is matched to this platform and
+architecture, and the download URL must be HTTPS on GitHub's own hosts —
+`github.com`, `objects.githubusercontent.com` or a subdomain of either. A lookalike
+such as `github.com.evil.example`, a URL carrying userinfo, or a bare IP address is
+refused. That check runs again at the moment the URL is opened, because that is the
+call that acts on it.
+
+BHTerminal does not download or run an installer itself. It hands the URL to your
+browser, so you can see what you are getting and where it came from before anything
+is installed — which matters more than usual for an app that is self-signed.
+
+## Backups
+
+A backup holding saved passwords is always encrypted (AES-GCM under a PBKDF2 key,
+210,000 iterations) and the passphrase is required, not optional — writing secrets
+in the clear would undo the vault. Backup files are written owner-only (0600 on
+macOS and Linux). A backup exported WITHOUT secrets is plain, readable JSON and
+contains no credentials at all; that is the one to use for moving a host list
+between computers.
+
+Importing from MobaXterm or an `ssh_config` treats the file as untrusted input:
+names are stripped of control characters and clamped in length, and every hostname
+and username is re-checked against the ssh argument allow-list, so a crafted export
+cannot smuggle an option such as `-oProxyCommand=…` into a saved host.
+
 ## Signing & notarization
 
 BHTerminal is **self-signed and not notarized** (no paid Apple Developer
