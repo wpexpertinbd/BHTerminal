@@ -200,6 +200,9 @@ export const api = {
   importPreview: (path: string) => invoke<ImportPreview>("import_preview", { path }),
   importApply: (path: string) => invoke<ImportResult>("import_apply", { path }),
 
+  /** null hands the native window chrome back to the system. */
+  setWindowTheme: (theme: string | null) => invoke<void>("set_window_theme", { theme }),
+
   startLogging: (paneId: string, path: string) =>
     invoke<void>("start_logging", { paneId, path }),
   stopLogging: (paneId: string) => invoke<void>("stop_logging", { paneId }),

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { api, Channel, decodeChunk, type PtyEvent } from "./api";
+import { TERMINAL_THEMES } from "./theme";
 import "@xterm/xterm/css/xterm.css";
 
 interface Props {
@@ -15,6 +16,9 @@ interface Props {
    *  panes are visible and only one is focused — which is why these are two
    *  props and not one. */
   focused: boolean;
+  /** Light or dark, already resolved — the terminal follows the rest of the
+   *  window rather than being dark whatever the desktop is doing. */
+  mode: "light" | "dark";
   onReady: (paneId: string) => void;
   /** Where a keystroke goes. The pane does NOT write to its own session
    *  directly: with broadcast on, what is typed here belongs to every pane in
@@ -29,6 +33,7 @@ export function TerminalPane({
   hostId,
   visible,
   focused,
+  mode,
   onReady,
   onInput,
   onExit,
@@ -42,6 +47,9 @@ export function TerminalPane({
   // render's callback — broadcast can be switched on after the pane exists.
   const onInputRef = useRef(onInput);
   onInputRef.current = onInput;
+  // Read at creation time; the effect below keeps it current afterwards.
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   // Created exactly once per pane. ⚠️ Never tear this down on tab switch:
   // the session lives in Rust, and disposing the terminal here would throw
@@ -52,7 +60,7 @@ export function TerminalPane({
       fontSize: 13,
       cursorBlink: true,
       allowProposedApi: true,
-      theme: { background: "#1e1e1e", foreground: "#e6e6e6" },
+      theme: { ...TERMINAL_THEMES[modeRef.current] },
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -111,6 +119,13 @@ export function TerminalPane({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The appearance changed under a live terminal: repaint it without
+  // disturbing the session or its scrollback.
+  useEffect(() => {
+    const term = termRef.current;
+    if (term) term.options.theme = { ...TERMINAL_THEMES[mode] };
+  }, [mode]);
 
   // Becoming visible: xterm can't measure a hidden element, so re-fit and
   // tell the remote the new size.

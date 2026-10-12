@@ -42,3 +42,45 @@ export function initTheme(): ThemeChoice {
   applyTheme(choice);
   return choice;
 }
+
+/** What the choice actually resolves to right now — "system" has to be asked
+ *  of the OS, and the answer can change while the app is open. */
+export function resolvedMode(choice: ThemeChoice): "light" | "dark" {
+  if (choice !== "system") return choice;
+  try {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
+
+/** Calls back when the SYSTEM appearance changes, so a window left on "Auto"
+ *  follows the desktop without being reopened. Returns an unsubscribe. */
+export function watchSystemMode(onChange: () => void): () => void {
+  try {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  } catch {
+    return () => {};
+  }
+}
+
+/** The terminal's own colours. A light shell on a light desktop is what was
+ *  asked for; the palette is the UI's, not a theme of its own. */
+export const TERMINAL_THEMES = {
+  light: {
+    background: "#ffffff",
+    foreground: "#1d1d1f",
+    cursor: "#0d6efd",
+    cursorAccent: "#ffffff",
+    selectionBackground: "#cfe2ff",
+  },
+  dark: {
+    background: "#1e1e1e",
+    foreground: "#e6e6e6",
+    cursor: "#e6e6e6",
+    cursorAccent: "#1e1e1e",
+    selectionBackground: "#3a3f4b",
+  },
+} as const;

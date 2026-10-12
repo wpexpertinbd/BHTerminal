@@ -48,7 +48,10 @@ export function useUpdateCheck(currentVersionSink?: (v: string) => void) {
           );
         }
         const found = await api.updateEvaluate(await res.text());
-        setState({ available: found, error: null, checking: false, upToDate: !found });
+        // "You are up to date" is an ANSWER, so it is only shown to someone
+        // who asked. The automatic check on launch stays silent unless there
+        // is actually something new.
+        setState({ available: found, error: null, checking: false, upToDate: manual && !found });
       } catch (e) {
         // An automatic check fails silently; only a requested one reports.
         setState((s) => ({

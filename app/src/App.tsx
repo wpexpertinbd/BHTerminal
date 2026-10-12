@@ -4,7 +4,7 @@ import { api, blankHost, newId, type Host, type HostFolder, type Workspace } fro
 import { HostEditor } from "./HostEditor";
 import { TransferSheet } from "./TransferSheet";
 import { useUpdateCheck } from "./useUpdateCheck";
-import { applyTheme, loadTheme, type ThemeChoice } from "./theme";
+import { applyTheme, loadTheme, resolvedMode, watchSystemMode, type ThemeChoice } from "./theme";
 import { SnippetBar } from "./SnippetBar";
 import { TunnelBar } from "./TunnelBar";
 import { TerminalPane } from "./TerminalPane";
@@ -82,6 +82,9 @@ export default function App() {
   const [transfer, setTransfer] = useState<"export" | "restore" | "import" | null>(null);
   const [version, setVersion] = useState<string>("");
   const [theme, setTheme] = useState<ThemeChoice>(loadTheme);
+  /** What that choice means right now. "Auto" has to be re-asked whenever the
+   *  desktop switches, which is what the watcher is for. */
+  const [mode, setMode] = useState<"light" | "dark">(() => resolvedMode(loadTheme()));
   /** Where the focused pane is recording, if it is. Read from Rust rather
    *  than tracked here, so it stays right across tab switches. */
   const [logPath, setLogPath] = useState<string | null>(null);
@@ -90,6 +93,13 @@ export default function App() {
   useEffect(() => {
     api.loadWorkspace().then(setWorkspace).catch((e) => setError(String(e)));
   }, []);
+
+  // Follow the desktop while the choice is "Auto".
+  useEffect(() => {
+    api.setWindowTheme(theme === "system" ? null : theme).catch(() => {});
+    if (theme !== "system") return;
+    return watchSystemMode(() => setMode(resolvedMode("system")));
+  }, [theme]);
 
   const hostsByFolder = useMemo(() => {
     const map = new Map<string | null, Host[]>();
@@ -478,6 +488,11 @@ export default function App() {
                         onClick={() => {
                           setTheme(t);
                           applyTheme(t);
+                          setMode(resolvedMode(t));
+                          // The titlebar is the OS's, not the webview's, so
+                          // it has to be told separately or a light window
+                          // keeps a dark titlebar (and black title text).
+                          api.setWindowTheme(t === "system" ? null : t).catch(() => {});
                         }}
                       >
                         {t === "system" ? "Auto" : t === "light" ? "Light" : "Dark"}
@@ -664,6 +679,7 @@ export default function App() {
                       paneKey={p.key}
                       hostId={p.hostId}
                       visible={t.key === activeTabKey}
+                      mode={mode}
                       focused={t.key === activeTabKey && p.key === t.focused}
                       onReady={(id) => paneIds.set(p.key, id)}
                       onInput={sendInput}

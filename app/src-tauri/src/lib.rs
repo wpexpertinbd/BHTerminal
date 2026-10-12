@@ -597,6 +597,7 @@ pub fn run() {
             stop_logging,
             logging_path,
             suggested_log_name,
+            set_window_theme,
         ])
         .on_window_event(move |window, event| {
             // Every pane is a child ssh process; leaving them behind would
@@ -611,4 +612,21 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running BHTerminal");
+}
+
+/// Matches the native window chrome to the appearance the user picked.
+///
+/// The CSS `color-scheme` handles everything inside the webview, but the
+/// titlebar is the OS's, and it keeps whatever the system says — which is how
+/// a light window ends up with a dark titlebar, and black title text on it.
+/// `None` hands the decision back to the system.
+#[tauri::command]
+fn set_window_theme(window: tauri::Window, theme: Option<String>) -> Result<(), String> {
+    let theme = match theme.as_deref() {
+        Some("dark") => Some(tauri::Theme::Dark),
+        Some("light") => Some(tauri::Theme::Light),
+        // Anything else, "system" included, follows the OS again.
+        _ => None,
+    };
+    window.set_theme(theme).map_err(|e| e.to_string())
 }

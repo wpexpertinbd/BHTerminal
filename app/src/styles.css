@@ -3,8 +3,13 @@
    :not([data-theme="light"]) so an explicit choice always wins over the
    system, and [data-theme="dark"] forces dark on a light system. */
 :root {
-  --bg: #1e1e1e;          /* behind the terminals */
-  --sidebar: #f6f6f7;
+  /* Tells the engine which way the NATIVE bits lean — scrollbars, form
+     controls and the window chrome. Without it they stay light while the
+     page goes dark, which is where black-on-black titlebars come from. */
+  color-scheme: light;
+  --bg: #e9e9ec;          /* behind the terminals */
+  --sidebar: #fafafa;
+  --topbar: #fff;
   --surface: #fff;        /* panels, menus, fields, dialogs */
   --surface-2: #f1f1f3;   /* inset chips and code */
   --line: #d9d9de;
@@ -25,15 +30,17 @@
   --warn-line: #ffe2a8;
   --warn-text: #7a5b00;
   --update-bg: #eef4ff;
-  /* The pane header sits on the terminal, so it is dark in both themes. */
-  --pane-head: #262628;
-  --pane-head-text: #b9b9bd;
+  /* The pane header sits on the terminal, so it follows it. */
+  --pane-head: #ececed;
+  --pane-head-text: #5c5c61;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: #161617;
     --sidebar: #1f1f21;
+    --topbar: #252528;
     --surface: #2a2a2d;
     --surface-2: #323236;
     --line: #3a3a3e;
@@ -55,8 +62,10 @@
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --bg: #161617;
   --sidebar: #1f1f21;
+  --topbar: #252528;
   --surface: #2a2a2d;
   --surface-2: #323236;
   --line: #3a3a3e;
@@ -101,6 +110,7 @@ body {
 .sidebar-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 12px; border-bottom: 1px solid var(--line);
+  background: var(--topbar);
 }
 .sidebar-head button {
   border: 0; background: transparent; font-size: 15px; cursor: pointer; color: var(--accent);
@@ -141,7 +151,7 @@ body {
 
 .tabs {
   display: flex; gap: 2px; padding: 4px 6px;
-  background: var(--sidebar); border-bottom: 1px solid var(--line);
+  background: var(--topbar); border-bottom: 1px solid var(--line);
   overflow-x: auto; min-height: 32px;
 }
 .tab {
