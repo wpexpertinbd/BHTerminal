@@ -8,6 +8,10 @@
      page goes dark, which is where black-on-black titlebars come from. */
   color-scheme: light;
   --bg: #e9e9ec;          /* behind the terminals */
+  /* The terminal's own background, so the padding around the text reads as
+     breathing room rather than a grey frame around a white box.
+     ⚠️ Keep in step with TERMINAL_THEMES in theme.ts. */
+  --term-bg: #ffffff;
   --sidebar: #fafafa;
   --topbar: #fff;
   --surface: #fff;        /* panels, menus, fields, dialogs */
@@ -39,6 +43,7 @@
   :root:not([data-theme="light"]) {
     color-scheme: dark;
     --bg: #161617;
+    --term-bg: #1e1e1e;
     --sidebar: #1f1f21;
     --topbar: #252528;
     --surface: #2a2a2d;
@@ -64,6 +69,7 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #161617;
+  --term-bg: #1e1e1e;
   --sidebar: #1f1f21;
   --topbar: #252528;
   --surface: #2a2a2d;
@@ -171,7 +177,12 @@ body {
 /* Breathing room on all four sides. xterm's fit addon measures this
    element's CONTENT box, so padding correctly shrinks the usable grid
    instead of pushing the last column out of sight. */
-.term-host { position: absolute; inset: 0; padding: 10px 12px; }
+.term-host {
+  position: absolute; inset: 0; padding: 14px 16px;
+  /* Painted the same colour as the terminal itself — otherwise the padding
+     shows the pane behind it and looks like a border. */
+  background: var(--term-bg);
+}
 
 .placeholder {
   position: absolute; inset: 0; display: grid; place-items: center;
