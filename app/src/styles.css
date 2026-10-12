@@ -168,7 +168,10 @@ body {
 /* Inside a split, a pane slot is the positioning context; a lone pane uses
    the panes area itself. Either way the terminal fills what contains it. */
 .term-wrap { position: absolute; inset: 0; }
-.term-host { position: absolute; inset: 0; padding: 6px; }
+/* Breathing room on all four sides. xterm's fit addon measures this
+   element's CONTENT box, so padding correctly shrinks the usable grid
+   instead of pushing the last column out of sight. */
+.term-host { position: absolute; inset: 0; padding: 10px 12px; }
 
 .placeholder {
   position: absolute; inset: 0; display: grid; place-items: center;
