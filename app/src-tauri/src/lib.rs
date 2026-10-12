@@ -599,19 +599,102 @@ pub fn run() {
             suggested_log_name,
             set_window_theme,
         ])
-        .on_window_event(move |window, event| {
-            // Every pane is a child ssh process; leaving them behind would
-            // orphan connections (and their shared masters) after quit.
-            if let tauri::WindowEvent::Destroyed = event {
-                if window.webview_windows().len() <= 1 {
-                    registry.close_all();
-                    sftp.disconnect_all();
-                    tunnels.stop_all();
-                }
+        .setup(|app| {
+            build_tray(app.handle())?;
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Closing the window HIDES it. The sessions, the forwards and the
+            // SFTP connections live in Rust and keep running — closing the
+            // window is "put it away", not "drop my logins". Quitting is an
+            // explicit act, from the tray or the app menu.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running BHTerminal");
+        .build(tauri::generate_context!())
+        .expect("error while starting BHTerminal")
+        .run(move |app, event| match event {
+            // Clicking the Dock icon with no window on screen brings the one
+            // that was hidden back, rather than doing nothing.
+            tauri::RunEvent::Reopen { .. } => show_main_window(app),
+            // The ONE place everything is torn down. Every pane is a child
+            // ssh process and every forward is another; leaving them behind
+            // would orphan connections and their shared masters.
+            tauri::RunEvent::Exit => {
+                registry.close_all();
+                sftp.disconnect_all();
+                tunnels.stop_all();
+            }
+            _ => {}
+        });
+}
+
+/// Brings the main window back and focuses it, unhiding the app first — on
+/// macOS a hidden app's window stays invisible however many times it is told
+/// to show itself.
+fn show_main_window(app: &tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    let _ = app.show();
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+/// The menu-bar glyph, embedded so it resolves inside the bundle on every
+/// platform. Drawn as black-plus-alpha; see the comment at its use.
+const MENUBAR_ICON: &[u8] = include_bytes!("../icons/menubar-template.png");
+
+/// The menu-bar item: what keeps BHTerminal reachable once its window is
+/// closed, and the only place that really quits it.
+fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+    let open = MenuItem::with_id(app, "open", "Open BHTerminal", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit BHTerminal", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open, &quit])?;
+
+    // A dedicated monochrome glyph, NOT the app icon: the app icon is a
+    // filled rounded square, so as a template it renders as a featureless
+    // blob. As a template image macOS recolours this to match the menu bar —
+    // white on a dark one, black on a light one — so it sits with the other
+    // status items instead of shouting over them.
+    let tray = TrayIconBuilder::with_id("main")
+        .icon(tauri::image::Image::from_bytes(MENUBAR_ICON)?)
+        .icon_as_template(true)
+        .tooltip("BHTerminal")
+        .menu(&menu)
+        // The menu belongs on a right-click; a left-click should just bring
+        // the window back, which is what people expect of a menu-bar app.
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "open" => show_main_window(app),
+            // exit() runs RunEvent::Exit, which is where the ssh children,
+            // the forwards and the SFTP sessions are closed.
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main_window(tray.app_handle());
+            }
+        })
+        .build(app)?;
+
+    // ⚠️ The TrayIcon has to be KEPT. Dropping the value returned by build()
+    // takes the item straight back out of the menu bar — which looks exactly
+    // like the tray never being created at all.
+    app.manage(tray);
+    Ok(())
 }
 
 /// Matches the native window chrome to the appearance the user picked.

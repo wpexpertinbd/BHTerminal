@@ -51,6 +51,9 @@ reference the Rust version was ported from, and is no longer the shipping build.
   it back on another computer without deleting anything added since. This is how you move
   a host list between the macOS, Windows and Linux builds. Saved passwords can be
   included, and are then always encrypted (AES-GCM under PBKDF2) with a passphrase you choose.
+- **Closing the window does not quit it.** BHTerminal stays in the menu bar with your
+  sessions, forwards and SFTP connections alive; click the icon to bring the window
+  back, and **Quit BHTerminal** from its menu when you really mean it.
 - **Update check** — finds the right installer for your machine and opens it in your
   browser. It never downloads or runs anything itself; see [`SECURITY.md`](SECURITY.md).
 - **Secure by design** — host-key verification, an ssh argument allow-list, and imports

@@ -16,7 +16,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 bhterm-core = { path = "../../crates/bhterm-core" }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 # Unix pty AND Windows ConPTY behind one API — the reason a single terminal
