@@ -9,7 +9,7 @@
 <p align="center"><i>Built and maintained by <a href="https://www.biswashost.com">BiswasHost</a> 🇧🇩</i></p>
 
 <p align="center">
-  <img src="docs/images/bhterminal.png" alt="BHTerminal: the session tree on the left, with folders of hosts, beside an open terminal tab" width="900">
+  <img src="docs/images/bhterminal.png" alt="BHTerminal connected to an Ubuntu server: the session tree on the left, the terminal in the middle, and the SFTP file browser on the right — all in one tab" width="900">
 </p>
 
 ---
