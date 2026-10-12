@@ -427,3 +427,41 @@ body {
 .menu-seg > span { display: block; font-size: 11px; color: var(--muted); margin-bottom: 5px; }
 .menu-seg .seg button { font-size: 11.5px; padding: 4px 2px; }
 /* END BHTERM-APPEARANCE */
+
+/* BHTERM-FILE-ACTIONS */
+.ficon { display: inline-flex; align-items: center; flex: 0 0 15px; }
+
+.ctx {
+  position: fixed; z-index: 120; min-width: 190px; padding: 4px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 10px 28px var(--shadow); display: flex; flex-direction: column;
+}
+.ctx button {
+  text-align: left; border: 0; background: transparent; cursor: pointer;
+  font: inherit; font-size: 12.5px; padding: 5px 9px; border-radius: 5px; color: var(--text);
+}
+.ctx button:hover:not(:disabled) { background: var(--accent); color: #fff; }
+.ctx button:disabled { opacity: .4; cursor: default; }
+.ctx button.danger { color: var(--danger); }
+.ctx button.danger:hover:not(:disabled) { background: var(--danger-fill); color: #fff; }
+.ctx hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
+
+/* The editor is a working surface, so it takes the window rather than the
+   dialog-sized box the other sheets use. */
+.modal.editor { width: min(980px, 92vw); display: flex; flex-direction: column; }
+.modal.editor h2 { margin-bottom: 2px; }
+.editor-path {
+  font-size: 11.5px; color: var(--muted); margin-bottom: 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.editor-area {
+  width: 100%; box-sizing: border-box; height: min(60vh, 560px); resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+  line-height: 1.45; padding: 9px 10px; tab-size: 4;
+  border: 1px solid var(--line); border-radius: 7px;
+  background: var(--surface); color: var(--text);
+}
+.editor-status { margin-right: auto; font-size: 11.5px; color: var(--muted); align-self: center; }
+.dirty-dot { color: var(--accent); font-size: 12px; margin-left: 7px; vertical-align: middle; }
+/* END BHTERM-FILE-ACTIONS */

@@ -178,6 +178,10 @@ export const api = {
     invoke<number>("sftp_download", { hostId, remote, local }),
   sftpUpload: (hostId: string, local: string, remoteDir: string) =>
     invoke<number>("sftp_upload", { hostId, local, remoteDir }),
+  /** Writes a local file to an EXACT remote path — used when saving an edit
+   *  back, where the name must not drift. */
+  sftpUploadTo: (hostId: string, local: string, remote: string) =>
+    invoke<number>("sftp_upload_to", { hostId, local, remote }),
   sftpPrune: (keep: string[]) => invoke<void>("sftp_prune", { keep }),
 
   vncPrepare: (hostId: string) => invoke<string>("vnc_prepare", { hostId }),
@@ -199,6 +203,23 @@ export const api = {
     invoke<RestoreReport>("backup_restore", { path, passphrase }),
   importPreview: (path: string) => invoke<ImportPreview>("import_preview", { path }),
   importApply: (path: string) => invoke<ImportResult>("import_apply", { path }),
+
+  /** Packs entries of `dir` into one archive there; returns its name. */
+  sftpCompress: (hostId: string, dir: string, names: string[], format: "zip" | "tar.gz") =>
+    invoke<string>("sftp_compress", { hostId, dir, names, format }),
+  sftpExtract: (hostId: string, dir: string, name: string) =>
+    invoke<void>("sftp_extract", { hostId, dir, name }),
+
+  /** Where a remote file is staged locally while it is being edited. */
+  editScratchPath: (hostId: string, remote: string) =>
+    invoke<string>("edit_scratch_path", { hostId, remote }),
+  readTextFile: (path: string) => invoke<string>("read_text_file", { path }),
+  writeTextFile: (path: string, contents: string) =>
+    invoke<void>("write_text_file", { path, contents }),
+  fileMtime: (path: string) => invoke<number>("file_mtime", { path }),
+  /** `app` names an application (macOS); null uses the system default. */
+  openInApp: (path: string, app: string | null) => invoke<void>("open_in_app", { path, app }),
+  discardScratch: (path: string) => invoke<void>("discard_scratch", { path }),
 
   /** null hands the native window chrome back to the system. */
   setWindowTheme: (theme: string | null) => invoke<void>("set_window_theme", { theme }),

@@ -2,6 +2,9 @@
 //! Everything portable lives in `bhterm-core`; this file is the part that
 //! talks to the OS and the webview.
 
+mod archive;
+mod edit;
+// vault_file() is part of the paths contract but only the Vault opens it.
 #[allow(dead_code)]
 mod paths;
 mod pty;
@@ -499,6 +502,23 @@ async fn sftp_upload(
 }
 
 /// SFTP rides the terminal's connection, so a host with no terminal tab left
+/// Uploads to an EXACT remote path. `sftp_upload` puts a file into a folder;
+/// saving an edit has to land back on the file it came from, name and all.
+#[tauri::command]
+async fn sftp_upload_to(
+    sftp: tauri::State<'_, SharedSftp>,
+    host_id: String,
+    local: String,
+    remote: String,
+) -> Result<u64, String> {
+    let sftp = sftp.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        sftp.upload(&host_id, std::path::Path::new(&local), &remote)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// open has no business holding one. The UI reports which hosts are still
 /// open whenever its tabs change.
 #[tauri::command]
@@ -572,6 +592,7 @@ pub fn run() {
             sftp_delete,
             sftp_download,
             sftp_upload,
+            sftp_upload_to,
             sftp_disconnect,
             sftp_prune,
             vnc_prepare,
@@ -598,6 +619,14 @@ pub fn run() {
             logging_path,
             suggested_log_name,
             set_window_theme,
+            archive::sftp_compress,
+            archive::sftp_extract,
+            edit::read_text_file,
+            edit::write_text_file,
+            edit::file_mtime,
+            edit::open_in_app,
+            edit::edit_scratch_path,
+            edit::discard_scratch,
         ])
         .setup(|app| {
             build_tray(app.handle())?;
@@ -615,13 +644,16 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while starting BHTerminal")
-        .run(move |app, event| match event {
+        // `_app` is read only by the macOS reopen arm below; the underscore
+        // keeps the other platforms warning-free without hiding the binding.
+        .run(move |_app, event| {
+            match event {
             // Clicking the Dock icon with no window on screen brings the one
             // that was hidden back, rather than doing nothing.
             // ⚠️ macOS only — the variant does not exist elsewhere, and an
             // ungated arm fails to compile on Windows and Linux.
             #[cfg(target_os = "macos")]
-            tauri::RunEvent::Reopen { .. } => show_main_window(app),
+            tauri::RunEvent::Reopen { .. } => show_main_window(_app),
             // The ONE place everything is torn down. Every pane is a child
             // ssh process and every forward is another; leaving them behind
             // would orphan connections and their shared masters.
@@ -631,6 +663,7 @@ pub fn run() {
                 tunnels.stop_all();
             }
             _ => {}
+            }
         });
 }
 

@@ -186,3 +186,60 @@ fn a_forward_refuses_an_option_shaped_hostname() {
         Err(SshSafetyError::UnsafeHostname(_))
     ));
 }
+
+// ── running a command on the remote host ───────────────────────────────────
+
+#[test]
+fn shell_quoting_survives_the_names_that_matter() {
+    use bhterm_core::ssh::shell_quote;
+
+    assert_eq!(shell_quote("notes.txt"), "'notes.txt'");
+    assert_eq!(shell_quote("my file.txt"), "'my file.txt'");
+    // The whole point: a crafted name must arrive as a NAME.
+    assert_eq!(shell_quote("a; rm -rf ~"), "'a; rm -rf ~'");
+    assert_eq!(shell_quote("$(curl evil.example)"), "'$(curl evil.example)'");
+    assert_eq!(shell_quote("`id`"), "'`id`'");
+    assert_eq!(shell_quote("a\nb"), "'a\nb'");
+    assert_eq!(shell_quote("--force"), "'--force'");
+    // A single quote closes, escapes and reopens.
+    assert_eq!(shell_quote("it's"), r#"'it'\''s'"#);
+    assert_eq!(shell_quote("''"), r#"''\'''\'''"#);
+}
+
+#[test]
+fn a_quoted_name_cannot_break_out_of_its_command() {
+    use bhterm_core::ssh::shell_quote;
+
+    // Build a command the way the file pane does, then check the dangerous
+    // text is inside quotes rather than sitting in command position.
+    let cmd = format!("cd {} && tar -czf {} {}",
+        shell_quote("/var/www"),
+        shell_quote("out.tar.gz"),
+        shell_quote("a'; rm -rf /; echo '"));
+    assert_eq!(
+        cmd,
+        r#"cd '/var/www' && tar -czf 'out.tar.gz' 'a'\''; rm -rf /; echo '\'''"#
+    );
+    // Exactly three `&&`/`;` sequences outside quotes would be a disaster;
+    // the only unquoted operator is the one we wrote.
+    assert_eq!(cmd.matches("&&").count(), 1);
+}
+
+#[test]
+fn exec_passes_the_command_as_a_single_argument() {
+    let args = ssh::build_exec(&host(), None, None, "cd '/tmp' && tar -czf 'a.tgz' 'b'").unwrap();
+    assert_eq!(args[args.len() - 2], "root@example.com");
+    assert_eq!(args[args.len() - 1], "cd '/tmp' && tar -czf 'a.tgz' 'b'");
+    assert!(pair(&args, "-o", "BatchMode=yes"), "{args:?}");
+    assert!(args.contains(&"--".to_string()));
+}
+
+#[test]
+fn exec_refuses_an_option_shaped_hostname() {
+    let mut h = host();
+    h.hostname = "-oProxyCommand=curl evil.example".into();
+    assert!(matches!(
+        ssh::build_exec(&h, None, None, "true"),
+        Err(SshSafetyError::UnsafeHostname(_))
+    ));
+}

@@ -258,3 +258,49 @@ pub fn build_exit_master(
 pub fn resolve_jump(hosts: &[Host], id: Option<Uuid>) -> Option<&Host> {
     id.and_then(|id| hosts.iter().find(|h| h.id == id))
 }
+
+/// Wraps a value so a remote `sh -c` sees it as ONE literal argument.
+///
+/// Everything goes inside single quotes, and an embedded single quote is
+/// closed, escaped and reopened (`'\''`) — the only byte that needs care,
+/// because nothing else is special to the shell inside single quotes. File
+/// names on a server are attacker-adjacent data: `a; rm -rf ~` and
+/// `$(curl evil)` have to arrive as names, not as commands.
+pub fn shell_quote(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('\'');
+    for ch in value.chars() {
+        if ch == '\'' {
+            out.push_str("'\\''");
+        } else {
+            out.push(ch);
+        }
+    }
+    out.push('\'');
+    out
+}
+
+/// argv for running ONE command on the remote host and collecting its output.
+///
+/// It joins the terminal's shared connection when there is one, so it needs
+/// no second login, and runs under BatchMode so a host without one fails
+/// instead of waiting on a password prompt nothing can answer.
+pub fn build_exec(
+    host: &Host,
+    jump: Option<&Host>,
+    cm: Option<&ControlMaster>,
+    command: &str,
+) -> Result<Vec<String>, SshSafetyError> {
+    validate(host, jump)?;
+    let mut args = shared_options(host, jump);
+    args.extend(control_args(cm, false));
+    args.push("-o".into());
+    args.push("BatchMode=yes".into());
+    args.push("--".into());
+    args.push(destination(host));
+    // The command is ONE argument: ssh would otherwise join the remaining
+    // arguments with spaces and hand the result to the remote shell anyway,
+    // which is the sort of re-splitting this code exists to avoid.
+    args.push(command.to_string());
+    Ok(args)
+}
