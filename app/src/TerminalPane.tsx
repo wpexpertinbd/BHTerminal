@@ -16,15 +16,32 @@ interface Props {
    *  props and not one. */
   focused: boolean;
   onReady: (paneId: string) => void;
+  /** Where a keystroke goes. The pane does NOT write to its own session
+   *  directly: with broadcast on, what is typed here belongs to every pane in
+   *  the tab, and only the tab knows that. */
+  onInput: (paneKey: string, data: string) => void;
   onExit: (paneKey: string, code: number | null) => void;
   onTitle: (paneKey: string, title: string) => void;
 }
 
-export function TerminalPane({ paneKey, hostId, visible, focused, onReady, onExit, onTitle }: Props) {
+export function TerminalPane({
+  paneKey,
+  hostId,
+  visible,
+  focused,
+  onReady,
+  onInput,
+  onExit,
+  onTitle,
+}: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const paneIdRef = useRef<string | null>(null);
+  // xterm's handler is registered once, so it must not close over the first
+  // render's callback — broadcast can be switched on after the pane exists.
+  const onInputRef = useRef(onInput);
+  onInputRef.current = onInput;
 
   // Created exactly once per pane. ⚠️ Never tear this down on tab switch:
   // the session lives in Rust, and disposing the terminal here would throw
@@ -65,7 +82,7 @@ export function TerminalPane({ paneKey, hostId, visible, focused, onReady, onExi
       .then((paneId) => {
         paneIdRef.current = paneId;
         onReady(paneId);
-        term.onData((data) => api.write(paneId, data));
+        term.onData((data) => onInputRef.current(paneKey, data));
         term.focus();
       })
       .catch((e) => term.write(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`));

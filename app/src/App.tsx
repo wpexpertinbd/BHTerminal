@@ -31,6 +31,10 @@ interface Tab {
   /** Which of its panes has focus — snippets, the file browser and the
    *  forwards bar all follow this one. */
   focused: string;
+  /** Typing reaches every pane in THIS tab. Scoped to the tab on purpose:
+   *  a global flag would quietly reach the sessions in other tabs, which is
+   *  the one mistake this feature cannot afford. */
+  broadcast: boolean;
 }
 
 let paneSeq = 0;
@@ -41,7 +45,7 @@ function newPane(kind: Pane["kind"], hostId: string | null, title: string): Pane
 }
 
 function newTab(pane: Pane): Tab {
-  return { key: `tab-${++tabSeq}`, panes: [pane], axis: "row", focused: pane.key };
+  return { key: `tab-${++tabSeq}`, panes: [pane], axis: "row", focused: pane.key, broadcast: false };
 }
 
 /** Mirrors bhterm_core::title::parse_title — only something unambiguously a
@@ -142,6 +146,30 @@ export default function App() {
       prev.map((t) =>
         t.key === tab.key ? { ...t, axis, panes: [...t.panes, pane], focused: pane.key } : t
       )
+    );
+  }
+
+  /** A keystroke, or a snippet. With broadcast on it goes to every pane in
+   *  the tab the pane belongs to — and to nothing outside it. */
+  function sendInput(paneKey: string, data: string) {
+    const tab = tabs.find((t) => t.panes.some((p) => p.key === paneKey));
+    // An exited pane is skipped rather than written to: its session is gone,
+    // and "no such terminal" on every keypress is noise, not news — the tab
+    // already says it disconnected.
+    const targets =
+      tab && tab.broadcast && tab.panes.length > 1
+        ? tab.panes.filter((p) => !p.exited)
+        : tab?.panes.filter((p) => p.key === paneKey && !p.exited) ?? [];
+    for (const pane of targets) {
+      const id = paneIds.get(pane.key);
+      if (id) api.write(id, data).catch((e) => setError(String(e)));
+    }
+  }
+
+  function toggleBroadcast() {
+    if (!activeTabKey) return;
+    setTabs((prev) =>
+      prev.map((t) => (t.key === activeTabKey ? { ...t, broadcast: !t.broadcast } : t))
     );
   }
 
@@ -469,10 +497,7 @@ export default function App() {
             onSend={
               // Only when a terminal is in front — a snippet goes to a shell.
               active && active.kind === "terminal" && !active.exited
-                ? (command) => {
-                    const id = paneIds.get(active.key);
-                    if (id) api.write(id, command).catch((e) => setError(String(e)));
-                  }
+                ? (command) => sendInput(active.key, command)
                 : null
             }
             onChanged={(snippets) =>
@@ -548,6 +573,19 @@ export default function App() {
               <button title="Split downwards" onClick={() => splitFocused("column")}>
                 ⫻
               </button>
+              {activeTab && activeTab.panes.length > 1 && (
+                <button
+                  className={activeTab.broadcast ? "danger-on" : ""}
+                  title={
+                    activeTab.broadcast
+                      ? "Typing reaches every pane in this tab — click to stop"
+                      : "Type into every pane in this tab"
+                  }
+                  onClick={toggleBroadcast}
+                >
+                  ⇉
+                </button>
+              )}
               <button
                 className={logPath ? "on" : ""}
                 title={logPath ? `Logging to ${logPath}` : "Record this session to a file"}
@@ -571,7 +609,7 @@ export default function App() {
           {tabs.map((t) => (
             <div
               key={t.key}
-              className={`tab-panes ${t.axis}`}
+              className={`tab-panes ${t.axis} ${t.broadcast && t.panes.length > 1 ? "broadcasting" : ""}`}
               style={{ display: t.key === activeTabKey ? "flex" : "none" }}
             >
               {t.panes.map((p) => (
@@ -608,6 +646,7 @@ export default function App() {
                       visible={t.key === activeTabKey}
                       focused={t.key === activeTabKey && p.key === t.focused}
                       onReady={(id) => paneIds.set(p.key, id)}
+                      onInput={sendInput}
                       onExit={(key, code) =>
                         patchPane(key, (q) => ({
                           ...q,
@@ -639,6 +678,13 @@ export default function App() {
             follow={followTerminal}
             onFollowChange={setFollowTerminal}
           />
+        )}
+
+        {activeTab?.broadcast && activeTab.panes.length > 1 && (
+          <div className="broadcast-banner">
+            ⇉ Broadcast is on: what you type goes to all {activeTab.panes.length} panes in this tab.
+            <button onClick={toggleBroadcast}>Stop</button>
+          </div>
         )}
 
         {active?.exited && (
