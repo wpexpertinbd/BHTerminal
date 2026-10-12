@@ -61,8 +61,9 @@ reference the Rust version was ported from, and is no longer the shipping build.
   browser. It never downloads or runs anything itself; see [`SECURITY.md`](SECURITY.md).
 - **Right-click the terminal** for copy, copy everything, paste, select all and
   clear; right-click the file browser for everything described above.
-- **Drag the edge of either side pane** to resize it — double-click the edge to put
-  it back. The widths are remembered.
+- **Drag the edge of either side pane** to resize it, or collapse it entirely to give
+  the terminal the whole window — double-click an edge to restore its width. Both are
+  remembered.
 - **Secure by design** — host-key verification, an ssh argument allow-list, and imports
   treated as untrusted input. Details in [`SECURITY.md`](SECURITY.md).
 

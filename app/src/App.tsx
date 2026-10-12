@@ -97,7 +97,7 @@ export default function App() {
    *  than tracked here, so it stays right across tab switches. */
   const [logPath, setLogPath] = useState<string | null>(null);
   const update = useUpdateCheck(setVersion);
-  const { widths, startDrag, reset } = useResizablePanes();
+  const { widths, collapsed, startDrag, reset, toggleCollapsed } = useResizablePanes();
 
   useEffect(() => {
     api.loadWorkspace().then(setWorkspace).catch((e) => setError(String(e)));
@@ -478,7 +478,9 @@ export default function App() {
 
   return (
     <div
-      className="app"
+      className={`app ${collapsed.sidebar ? "hide-sidebar" : ""} ${
+        collapsed.files ? "hide-files" : ""
+      }`}
       style={
         {
           "--sidebar-w": `${widths.sidebar}px`,
@@ -489,6 +491,13 @@ export default function App() {
       <aside className="sidebar">
         <div className="sidebar-head">
           <strong>Sessions</strong>
+          <button
+            className="collapse"
+            title="Hide the sessions list"
+            onClick={() => toggleCollapsed("sidebar")}
+          >
+            «
+          </button>
           <div className="add">
             <button onClick={() => setMenuOpen((o) => !o)} title="Add">
               ＋
@@ -615,12 +624,24 @@ export default function App() {
       </aside>
 
       {/* Double-click puts a pane back to the width it shipped with. */}
-      <div
-        className="pane-divider"
-        title="Drag to resize · double-click to reset"
-        onMouseDown={() => startDrag("sidebar")}
-        onDoubleClick={() => reset("sidebar")}
-      />
+      {!collapsed.sidebar && (
+        <div
+          className="pane-divider"
+          title="Drag to resize · double-click to reset"
+          onMouseDown={() => startDrag("sidebar")}
+          onDoubleClick={() => reset("sidebar")}
+        />
+      )}
+
+      {collapsed.sidebar && (
+        <button
+          className="rail left"
+          title="Show the sessions list"
+          onClick={() => toggleCollapsed("sidebar")}
+        >
+          »
+        </button>
+      )}
 
       <main className="main">
         <div className="tabs">
@@ -752,7 +773,7 @@ export default function App() {
           ))}
         </div>
 
-        {active?.hostId && active.kind === "terminal" && !active.exited && (
+        {active?.hostId && active.kind === "terminal" && !active.exited && !collapsed.files && (
           <div
             className="pane-divider files-divider"
             title="Drag to resize · double-click to reset"
@@ -761,8 +782,19 @@ export default function App() {
           />
         )}
 
+        {active?.hostId && active.kind === "terminal" && !active.exited && collapsed.files && (
+          <button
+            className="rail right"
+            title="Show the file browser"
+            onClick={() => toggleCollapsed("files")}
+          >
+            «
+          </button>
+        )}
+
         {active?.hostId && active.kind === "terminal" && !active.exited && (
           <FilePane
+            onCollapse={() => toggleCollapsed("files")}
             key={active.hostId}
             hostId={active.hostId}
             terminalCwd={cwdByHost[active.hostId] ?? null}

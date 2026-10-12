@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const DEFAULTS = { sidebar: 250, files: 320 };
 const LIMITS = { sidebar: [170, 520], files: [220, 680] } as const;
 const KEY = "bhterminal.paneWidths";
+const COLLAPSED_KEY = "bhterminal.paneCollapsed";
 
 export type PaneName = keyof typeof DEFAULTS;
 
@@ -33,8 +34,22 @@ function load(): typeof DEFAULTS {
   }
 }
 
+function loadCollapsed(): { sidebar: boolean; files: boolean } {
+  try {
+    const raw = localStorage.getItem(COLLAPSED_KEY);
+    if (!raw) return { sidebar: false, files: false };
+    const saved = JSON.parse(raw) as Partial<{ sidebar: boolean; files: boolean }>;
+    return { sidebar: Boolean(saved.sidebar), files: Boolean(saved.files) };
+  } catch {
+    return { sidebar: false, files: false };
+  }
+}
+
 export function useResizablePanes() {
   const [widths, setWidths] = useState(load);
+  /** Collapsed panes keep their WIDTH, so expanding puts them back exactly
+   *  where they were rather than at the default. */
+  const [collapsed, setCollapsed] = useState(loadCollapsed);
   const dragging = useRef<PaneName | null>(null);
 
   useEffect(() => {
@@ -44,6 +59,14 @@ export function useResizablePanes() {
       /* the size still applies to this run */
     }
   }, [widths]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsed));
+    } catch {
+      /* the state still applies to this run */
+    }
+  }, [collapsed]);
 
   useEffect(() => {
     const move = (e: MouseEvent) => {
@@ -90,5 +113,9 @@ export function useResizablePanes() {
     setWidths((w) => ({ ...w, [name]: DEFAULTS[name] }));
   }, []);
 
-  return { widths, startDrag, reset };
+  const toggleCollapsed = useCallback((name: PaneName) => {
+    setCollapsed((c) => ({ ...c, [name]: !c[name] }));
+  }, []);
+
+  return { widths, collapsed, startDrag, reset, toggleCollapsed };
 }

@@ -517,3 +517,29 @@ body {
 body.resizing { cursor: col-resize; user-select: none; }
 body.resizing * { cursor: col-resize !important; }
 /* END BHTERM-RESIZE */
+
+/* BHTERM-COLLAPSE */
+.app.hide-sidebar .sidebar { display: none; }
+.app.hide-files .files { display: none; }
+/* With the file browser hidden the terminals take the whole width. */
+.app.hide-files .panes.with-files .tab-panes { right: 0; }
+
+.collapse {
+  border: 0; background: transparent; cursor: pointer; color: var(--muted);
+  font-size: 13px; line-height: 1; padding: 2px 5px; border-radius: 5px;
+}
+.collapse:hover { background: var(--hover); color: var(--text); }
+.files-bar .collapse { margin-left: 4px; }
+.spin + .collapse { margin-left: 0; }
+
+/* The way back: a thin tab on the edge the pane went to, rather than a
+   hidden shortcut nobody would find. */
+.rail {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 7;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+  cursor: pointer; font-size: 11px; padding: 14px 2px; line-height: 1;
+}
+.rail:hover { color: var(--text); background: var(--surface-2); }
+.rail.left { left: 0; border-left: 0; border-radius: 0 7px 7px 0; }
+.rail.right { right: 0; border-right: 0; border-radius: 7px 0 0 7px; }
+/* END BHTERM-COLLAPSE */

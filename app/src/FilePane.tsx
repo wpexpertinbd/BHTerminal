@@ -18,9 +18,11 @@ interface Props {
   terminalCwd: string | null;
   follow: boolean;
   onFollowChange: (on: boolean) => void;
+  /** Hides the pane, leaving a rail to bring it back. */
+  onCollapse: () => void;
 }
 
-export function FilePane({ hostId, terminalCwd, follow, onFollowChange }: Props) {
+export function FilePane({ hostId, terminalCwd, follow, onFollowChange, onCollapse }: Props) {
   const [listing, setListing] = useState<Listing | null>(null);
   const [status, setStatus] = useState("Connecting…");
   const [busy, setBusy] = useState(false);
@@ -318,6 +320,9 @@ export function FilePane({ hostId, terminalCwd, follow, onFollowChange }: Props)
         <button disabled={!listing} onClick={makeFolder} title="New folder">＋</button>
         <button disabled={!listing} onClick={upload} title="Upload…">⤒</button>
         {busy && <span className="spin">…</span>}
+        <button className="collapse" onClick={onCollapse} title="Hide the file browser">
+          »
+        </button>
       </div>
 
       <div className="files-path" title={listing?.path}>{listing?.path ?? ""}</div>
