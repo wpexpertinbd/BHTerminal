@@ -84,3 +84,59 @@ export const TERMINAL_THEMES = {
     selectionBackground: "#3a3f4b",
   },
 } as const;
+
+/** The terminal's font, kept with the theme because they are one choice in
+ *  the user's head: "how the terminal looks".
+ *
+ *  Each entry is a CSS stack ending in `monospace`, so a font that is not
+ *  installed falls back instead of breaking the layout — the preview in the
+ *  Appearance sheet is what shows whether it is really there. */
+export const TERMINAL_FONTS: { label: string; stack: string }[] = [
+  { label: "System default", stack: 'Menlo, "Cascadia Mono", "DejaVu Sans Mono", monospace' },
+  { label: "SF Mono", stack: '"SF Mono", Menlo, monospace' },
+  { label: "Menlo", stack: "Menlo, monospace" },
+  { label: "Monaco", stack: "Monaco, monospace" },
+  { label: "Consolas", stack: "Consolas, monospace" },
+  { label: "Cascadia Mono", stack: '"Cascadia Mono", "Cascadia Code", monospace' },
+  { label: "JetBrains Mono", stack: '"JetBrains Mono", monospace' },
+  { label: "Fira Code", stack: '"Fira Code", monospace' },
+  { label: "DejaVu Sans Mono", stack: '"DejaVu Sans Mono", monospace' },
+  { label: "Ubuntu Mono", stack: '"Ubuntu Mono", monospace' },
+  { label: "Courier New", stack: '"Courier New", monospace' },
+];
+
+export interface TerminalFont {
+  family: string;
+  size: number;
+}
+
+export const FONT_LIMITS = { min: 9, max: 24 } as const;
+const DEFAULT_FONT: TerminalFont = { family: TERMINAL_FONTS[0].stack, size: 13 };
+const FONT_KEY = "bhterminal.terminalFont";
+
+export function loadFont(): TerminalFont {
+  try {
+    const raw = localStorage.getItem(FONT_KEY);
+    if (!raw) return { ...DEFAULT_FONT };
+    const saved = JSON.parse(raw) as Partial<TerminalFont>;
+    const size = Number(saved.size);
+    return {
+      family: typeof saved.family === "string" && saved.family ? saved.family : DEFAULT_FONT.family,
+      size: Number.isFinite(size)
+        ? Math.min(FONT_LIMITS.max, Math.max(FONT_LIMITS.min, Math.round(size)))
+        : DEFAULT_FONT.size,
+    };
+  } catch {
+    return { ...DEFAULT_FONT };
+  }
+}
+
+export function saveFont(font: TerminalFont) {
+  try {
+    localStorage.setItem(FONT_KEY, JSON.stringify(font));
+  } catch {
+    /* the choice still applies to this run */
+  }
+}
+
+export const DEFAULT_TERMINAL_FONT = DEFAULT_FONT;

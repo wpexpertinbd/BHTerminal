@@ -12,6 +12,10 @@
      breathing room rather than a grey frame around a white box.
      ⚠️ Keep in step with TERMINAL_THEMES in theme.ts. */
   --term-bg: #ffffff;
+  /* One height for the three header strips — the sessions header, the tab
+     bar and the file-browser toolbar — so their bottom borders form a
+     single line across the window instead of three. */
+  --header-h: 40px;
   --sidebar: #fafafa;
   --topbar: #fff;
   --surface: #fff;        /* panels, menus, fields, dialogs */
@@ -117,8 +121,8 @@ body {
 
 .sidebar-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 12px; border-bottom: 1px solid var(--line);
-  background: var(--topbar);
+  height: var(--header-h); flex: 0 0 var(--header-h); padding: 0 12px;
+  border-bottom: 1px solid var(--line); background: var(--topbar);
 }
 .sidebar-head button {
   border: 0; background: transparent; font-size: 15px; cursor: pointer; color: var(--accent);
@@ -158,9 +162,10 @@ body {
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
 
 .tabs {
-  display: flex; gap: 2px; padding: 4px 6px;
+  display: flex; gap: 2px; align-items: center; padding: 0 6px;
+  height: var(--header-h); flex: 0 0 var(--header-h);
   background: var(--topbar); border-bottom: 1px solid var(--line);
-  overflow-x: auto; min-height: 32px;
+  overflow-x: auto;
 }
 .tab {
   display: flex; align-items: center; gap: 6px;
@@ -200,7 +205,11 @@ body {
   background: var(--surface); border-left: 1px solid var(--line);
   display: flex; flex-direction: column; font-size: 12px;
 }
-.files-bar { display: flex; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--line); align-items: center; }
+.files-bar {
+  display: flex; gap: 4px; align-items: center; padding: 0 8px;
+  height: var(--header-h); flex: 0 0 var(--header-h);
+  border-bottom: 1px solid var(--line);
+}
 .files-bar button { border: 1px solid var(--line); background: var(--surface); border-radius: 5px; cursor: pointer; padding: 2px 7px; }
 .files-bar button:disabled { opacity: .4; cursor: default; }
 .spin { margin-left: auto; color: var(--muted); }
@@ -557,3 +566,12 @@ body.resizing * { cursor: col-resize !important; }
 .rail.left { left: 0; border-left: 0; border-radius: 0 7px 7px 0; }
 .rail.right { right: 0; border-right: 0; border-radius: 7px 0 0 7px; }
 /* END BHTERM-COLLAPSE */
+
+/* BHTERM-APPEARANCE-SHEET */
+.modal.appearance { width: 460px; }
+.font-preview {
+  margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--term-bg); color: var(--text);
+  white-space: pre; overflow-x: auto; line-height: 1.4;
+}
+/* END BHTERM-APPEARANCE-SHEET */

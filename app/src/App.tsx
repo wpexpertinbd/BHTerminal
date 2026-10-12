@@ -6,7 +6,8 @@ import { HostEditor } from "./HostEditor";
 import { TransferSheet } from "./TransferSheet";
 import { useUpdateCheck } from "./useUpdateCheck";
 import { useResizablePanes } from "./useResizablePanes";
-import { applyTheme, loadTheme, resolvedMode, watchSystemMode, type ThemeChoice } from "./theme";
+import { loadFont, loadTheme, resolvedMode, saveFont, watchSystemMode, type TerminalFont, type ThemeChoice } from "./theme";
+import { AppearanceSheet } from "./AppearanceSheet";
 import { SnippetBar } from "./SnippetBar";
 import { TunnelBar } from "./TunnelBar";
 import { TerminalPane } from "./TerminalPane";
@@ -93,6 +94,8 @@ export default function App() {
   /** What that choice means right now. "Auto" has to be re-asked whenever the
    *  desktop switches, which is what the watcher is for. */
   const [mode, setMode] = useState<"light" | "dark">(() => resolvedMode(loadTheme()));
+  const [font, setFont] = useState<TerminalFont>(loadFont);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
   /** Where the focused pane is recording, if it is. Read from Rust rather
    *  than tracked here, so it stays right across tab switches. */
   const [logPath, setLogPath] = useState<string | null>(null);
@@ -525,28 +528,14 @@ export default function App() {
                   Restore a backup…
                 </button>
                 <hr />
-                <div className="menu-seg">
-                  <span>Appearance</span>
-                  <div className="seg">
-                    {(["system", "light", "dark"] as ThemeChoice[]).map((t) => (
-                      <button
-                        key={t}
-                        className={theme === t ? "on" : ""}
-                        onClick={() => {
-                          setTheme(t);
-                          applyTheme(t);
-                          setMode(resolvedMode(t));
-                          // The titlebar is the OS's, not the webview's, so
-                          // it has to be told separately or a light window
-                          // keeps a dark titlebar (and black title text).
-                          api.setWindowTheme(t === "system" ? null : t).catch(() => {});
-                        }}
-                      >
-                        {t === "system" ? "Auto" : t === "light" ? "Light" : "Dark"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setAppearanceOpen(true);
+                  }}
+                >
+                  Appearance…
+                </button>
                 <hr />
                 <button
                   onClick={() => {
@@ -747,6 +736,7 @@ export default function App() {
                       hostId={p.hostId}
                       visible={t.key === activeTabKey}
                       mode={mode}
+                      font={font}
                       focused={t.key === activeTabKey && p.key === t.focused}
                       onReady={(id) => paneIds.set(p.key, id)}
                       onInput={sendInput}
@@ -816,6 +806,25 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {appearanceOpen && (
+        <AppearanceSheet
+          theme={theme}
+          font={font}
+          onTheme={(t) => {
+            setTheme(t);
+            setMode(resolvedMode(t));
+            // The titlebar is the OS's, not the webview's, so it has to be
+            // told separately or a light window keeps a dark titlebar.
+            api.setWindowTheme(t === "system" ? null : t).catch(() => {});
+          }}
+          onFont={(f) => {
+            setFont(f);
+            saveFont(f);
+          }}
+          onClose={() => setAppearanceOpen(false)}
+        />
+      )}
 
       {ask && (
         <AskModal

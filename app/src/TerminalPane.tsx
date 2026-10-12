@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { api, Channel, decodeChunk, type PtyEvent } from "./api";
-import { TERMINAL_THEMES } from "./theme";
+import { TERMINAL_THEMES, type TerminalFont } from "./theme";
 import { ContextMenu, type MenuAction } from "./ContextMenu";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import "@xterm/xterm/css/xterm.css";
@@ -21,6 +21,8 @@ interface Props {
   /** Light or dark, already resolved — the terminal follows the rest of the
    *  window rather than being dark whatever the desktop is doing. */
   mode: "light" | "dark";
+  /** Family and size for the terminal text. */
+  font: TerminalFont;
   onReady: (paneId: string) => void;
   /** Where a keystroke goes. The pane does NOT write to its own session
    *  directly: with broadcast on, what is typed here belongs to every pane in
@@ -36,6 +38,7 @@ export function TerminalPane({
   visible,
   focused,
   mode,
+  font,
   onReady,
   onInput,
   onExit,
@@ -52,6 +55,8 @@ export function TerminalPane({
   // Read at creation time; the effect below keeps it current afterwards.
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  const fontRef = useRef(font);
+  fontRef.current = font;
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuAction[] } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -60,8 +65,8 @@ export function TerminalPane({
   // away the scrollback the user is switching back to.
   useEffect(() => {
     const term = new Terminal({
-      fontFamily: 'Menlo, "Cascadia Mono", "DejaVu Sans Mono", monospace',
-      fontSize: 13,
+      fontFamily: fontRef.current.family,
+      fontSize: fontRef.current.size,
       cursorBlink: true,
       allowProposedApi: true,
       theme: { ...TERMINAL_THEMES[modeRef.current] },
@@ -130,6 +135,22 @@ export function TerminalPane({
     const term = termRef.current;
     if (term) term.options.theme = { ...TERMINAL_THEMES[mode] };
   }, [mode]);
+
+  // A font change resizes the CELLS, not the element, so the ResizeObserver
+  // never fires — the grid has to be re-fitted by hand or the remote keeps
+  // the old columns and wraps in the wrong place.
+  useEffect(() => {
+    const term = termRef.current;
+    const fit = fitRef.current;
+    if (!term || !fit) return;
+    term.options.fontFamily = font.family;
+    term.options.fontSize = font.size;
+    if (!hostRef.current?.offsetParent) return; // hidden: cannot measure
+    requestAnimationFrame(() => {
+      try { fit.fit(); } catch { return; }
+      if (paneIdRef.current) api.resize(paneIdRef.current, term.cols, term.rows);
+    });
+  }, [font.family, font.size]);
 
   // Becoming visible: xterm can't measure a hidden element, so re-fit and
   // tell the remote the new size.

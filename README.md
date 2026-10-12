@@ -64,6 +64,8 @@ reference the Rust version was ported from, and is no longer the shipping build.
 - **Drag the edge of either side pane** to resize it, or collapse it entirely to give
   the terminal the whole window — double-click an edge to restore its width. Both are
   remembered.
+- **Appearance** — light or dark following your desktop, and the terminal's font family
+  and size, with a live preview. Everything applies to open sessions as you change it.
 - **Secure by design** — host-key verification, an ssh argument allow-list, and imports
   treated as untrusted input. Details in [`SECURITY.md`](SECURITY.md).
 
