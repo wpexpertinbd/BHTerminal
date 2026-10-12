@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, blankHost, newId, type Host, type HostFolder, type Workspace } from "./api";
 import { HostEditor } from "./HostEditor";
+import { TransferSheet } from "./TransferSheet";
 import { TerminalPane } from "./TerminalPane";
 import { FilePane } from "./FilePane";
 import { VncPane } from "./VncPane";
@@ -47,6 +48,7 @@ export default function App() {
    *  look for a stored secret that cannot exist yet). */
   const [editing, setEditing] = useState<{ host: Host; isNew: boolean } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [transfer, setTransfer] = useState<"export" | "restore" | "import" | null>(null);
 
   useEffect(() => {
     api.loadWorkspace().then(setWorkspace).catch((e) => setError(String(e)));
@@ -291,6 +293,16 @@ export default function App() {
                 >
                   Local shell
                 </button>
+                <hr />
+                <button onClick={() => { setMenuOpen(false); setTransfer("import"); }}>
+                  Import sessions…
+                </button>
+                <button onClick={() => { setMenuOpen(false); setTransfer("export"); }}>
+                  Export a backup…
+                </button>
+                <button onClick={() => { setMenuOpen(false); setTransfer("restore"); }}>
+                  Restore a backup…
+                </button>
               </div>
             )}
           </div>
@@ -404,6 +416,18 @@ export default function App() {
             setEditing(null);
           }}
           onCancel={() => setEditing(null)}
+        />
+      )}
+
+      {transfer && (
+        <TransferSheet
+          mode={transfer}
+          onChanged={() => {
+            // A restore or import can add hundreds of hosts and folders, so
+            // the tree is reloaded rather than merged here.
+            api.loadWorkspace().then(setWorkspace).catch((e) => setError(String(e)));
+          }}
+          onClose={() => setTransfer(null)}
         />
       )}
     </div>

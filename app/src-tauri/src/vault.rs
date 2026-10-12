@@ -86,20 +86,20 @@ impl Vault {
         Ok(())
     }
 
-    /// Used by backup export/import, which is not wired up yet — kept here
-    /// because the locking belongs with the vault, not with the backup code.
-    #[allow(dead_code)]
+    /// A copy for backup export. The locking belongs with the vault rather
+    /// than with the backup code, which is why this lives here.
     pub fn snapshot(&self) -> SecretVault {
         self.inner.lock().unwrap().clone()
     }
 
-    #[allow(dead_code)]
-    pub fn replace_from(&self, other: &SecretVault) -> Result<(), String> {
+    /// Applies a batch of changes under ONE lock and ONE save. An import can
+    /// carry 700+ passwords; saving per secret would re-encrypt and rewrite
+    /// the whole file that many times.
+    pub fn mutate<T>(&self, f: impl FnOnce(&mut SecretVault) -> T) -> Result<T, String> {
         let mut v = self.inner.lock().unwrap();
-        for (account, secret) in other.all() {
-            v.set(account.clone(), secret.clone());
-        }
-        v.save(&self.path, &self.key).map_err(|e| e.to_string())
+        let out = f(&mut v);
+        v.save(&self.path, &self.key).map_err(|e| e.to_string())?;
+        Ok(out)
     }
 }
 

@@ -40,6 +40,31 @@ export interface Workspace {
   multiplexing: boolean;
 }
 
+export interface RestoreSummary {
+  hostsAdded: number;
+  hostsUpdated: number;
+  foldersAdded: number;
+  foldersUpdated: number;
+  snippetsAdded: number;
+  snippetsUpdated: number;
+  secretsRestored: number;
+}
+
+export interface ImportPreview {
+  source: string;
+  hosts: number;
+  warnings: string[];
+}
+
+export interface ImportResult {
+  source: string;
+  hostsAdded: number;
+  foldersAdded: number;
+  skipped: number;
+  passwordsSaved: number;
+  warnings: string[];
+}
+
 export type PtyEvent =
   | { type: "output"; data: string }
   | { type: "exit"; code: number | null };
@@ -118,6 +143,15 @@ export const api = {
   deleteHost: (hostId: string) => invoke<void>("delete_host", { hostId }),
   saveFolder: (folder: HostFolder) => invoke<HostFolder>("save_folder", { folder }),
   deleteFolder: (folderId: string) => invoke<void>("delete_folder", { folderId }),
+
+  /** Returns how many secrets went into the archive. */
+  backupExport: (path: string, includeSecrets: boolean, passphrase: string | null) =>
+    invoke<number>("backup_export", { path, includeSecrets, passphrase }),
+  backupIsEncrypted: (path: string) => invoke<boolean>("backup_is_encrypted", { path }),
+  backupRestore: (path: string, passphrase: string | null) =>
+    invoke<RestoreSummary>("backup_restore", { path, passphrase }),
+  importPreview: (path: string) => invoke<ImportPreview>("import_preview", { path }),
+  importApply: (path: string) => invoke<ImportResult>("import_apply", { path }),
 };
 
 /** Remote paths are always "/"-separated whatever the local platform is. */

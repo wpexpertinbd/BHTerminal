@@ -212,3 +212,17 @@ body {
 .modal-actions button:disabled { opacity: .55; cursor: default; }
 .modal .error { padding: 6px 0 0; }
 /* END BHTERM-HOST-EDITOR */
+
+/* BHTERM-TRANSFER */
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
+.done-line { font-size: 12.5px; line-height: 1.45; margin: 0 0 9px; color: var(--text); }
+.done-line code { background: #f1f1f3; padding: 1px 4px; border-radius: 4px; font-size: 11.5px; }
+.bullets { font-size: 12.5px; line-height: 1.45; margin: 0 0 9px; padding-left: 18px; }
+.bullets li { margin-bottom: 6px; }
+.warnings {
+  background: #fff8e6; border: 1px solid #ffe2a8; border-radius: 7px;
+  padding: 7px 9px; font-size: 11.5px; color: #7a5b00; max-height: 180px; overflow: auto;
+}
+.warnings p { margin: 0 0 5px; }
+.warnings p:last-child { margin: 0; }
+/* END BHTERM-TRANSFER */

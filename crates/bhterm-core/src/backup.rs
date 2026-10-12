@@ -171,7 +171,8 @@ pub fn decode(bytes: &[u8], passphrase: Option<&str>) -> Result<Payload, BackupE
     serde_json::from_slice(&plaintext).map_err(|_| CryptoError::WrongPassphrase.into())
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RestoreSummary {
     pub hosts_added: usize,
     pub hosts_updated: usize,
