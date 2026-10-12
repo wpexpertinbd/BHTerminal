@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type Host, type HostFolder, type Workspace } from "./api";
+import { api, blankHost, newId, type Host, type HostFolder, type Workspace } from "./api";
+import { HostEditor } from "./HostEditor";
 import { TerminalPane } from "./TerminalPane";
 import { FilePane } from "./FilePane";
 import { VncPane } from "./VncPane";
@@ -42,6 +43,10 @@ export default function App() {
   /** Latest cwd each host's terminal reported through its window title. */
   const [cwdByHost, setCwdByHost] = useState<Record<string, string>>({});
   const [followTerminal, setFollowTerminal] = useState(false);
+  /** The host being edited, and whether it is new (so the editor knows not to
+   *  look for a stored secret that cannot exist yet). */
+  const [editing, setEditing] = useState<{ host: Host; isNew: boolean } | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     api.loadWorkspace().then(setWorkspace).catch((e) => setError(String(e)));
@@ -90,6 +95,73 @@ export default function App() {
     setActiveKey(pane.key);
   }
 
+  /** Replaces the host in place after a save so the tree updates without a
+   *  full reload (which would also lose nothing, but flickers). */
+  function mergeHost(saved: Host) {
+    setWorkspace((w) => {
+      if (!w) return w;
+      const hosts = w.store.hosts.some((h) => h.id === saved.id)
+        ? w.store.hosts.map((h) => (h.id === saved.id ? saved : h))
+        : [...w.store.hosts, saved];
+      return { ...w, store: { ...w.store, hosts } };
+    });
+    if (saved.folderID) setExpanded((e) => new Set(e).add(saved.folderID!));
+    setSelected(saved.id);
+  }
+
+  function newHost(folderID: string | null) {
+    setMenuOpen(false);
+    setEditing({ host: blankHost(folderID), isNew: true });
+  }
+
+  async function newFolder() {
+    setMenuOpen(false);
+    const name = window.prompt("Folder name");
+    if (!name?.trim()) return;
+    try {
+      const saved = await api.saveFolder({
+        id: newId(),
+        name: name.trim(),
+        parentFolderID: null,
+        sortOrder: 0,
+      });
+      setWorkspace((w) =>
+        w ? { ...w, store: { ...w.store, folders: [...w.store.folders, saved] } } : w
+      );
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  async function removeHost(h: Host) {
+    if (!window.confirm(`Delete “${h.name}”? Its saved password is deleted too.`)) return;
+    try {
+      await api.deleteHost(h.id);
+      setWorkspace((w) =>
+        w ? { ...w, store: { ...w.store, hosts: w.store.hosts.filter((x) => x.id !== h.id) } } : w
+      );
+      if (selected === h.id) setSelected(null);
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  async function removeFolder(f: HostFolder) {
+    const inside = (hostsByFolder.get(f.id) ?? []).length;
+    const warning = inside
+      ? `Delete “${f.name}” and the ${inside} host${inside === 1 ? "" : "s"} inside it?`
+      : `Delete “${f.name}”?`;
+    if (!window.confirm(warning)) return;
+    try {
+      await api.deleteFolder(f.id);
+      // The delete cascades into subfolders on the Rust side, so reload rather
+      // than trying to reproduce that walk here.
+      setWorkspace(await api.loadWorkspace());
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
   const paneIds = useMemo(() => new Map<string, string>(), []);
 
   function closePane(key: string) {
@@ -125,8 +197,30 @@ export default function App() {
         <span className="host-text">
           <span className="host-name">{h.name}</span>
           <span className="host-sub">
-            {h.username}@{h.hostname}:{h.port}
+            {h.connectionType === "vnc"
+              ? `VNC ${h.hostname}:${h.port}`
+              : `${h.username}@${h.hostname}:${h.port}`}
           </span>
+        </span>
+        <span className="row-actions">
+          <button
+            title="Edit"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditing({ host: h, isNew: false });
+            }}
+          >
+            ✎
+          </button>
+          <button
+            title="Delete"
+            onClick={(e) => {
+              e.stopPropagation();
+              removeHost(h);
+            }}
+          >
+            🗑
+          </button>
         </span>
       </div>
     );
@@ -141,6 +235,26 @@ export default function App() {
           <span className="twisty">{open ? "▾" : "▸"}</span>
           <span>{f.name}</span>
           <span className="count">{children.length}</span>
+          <span className="row-actions">
+            <button
+              title="New host in this folder"
+              onClick={(e) => {
+                e.stopPropagation();
+                newHost(f.id);
+              }}
+            >
+              ＋
+            </button>
+            <button
+              title="Delete folder"
+              onClick={(e) => {
+                e.stopPropagation();
+                removeFolder(f);
+              }}
+            >
+              🗑
+            </button>
+          </span>
         </div>
         {open && <div className="children">{children.map(renderHost)}</div>}
       </div>
@@ -161,14 +275,37 @@ export default function App() {
       <aside className="sidebar">
         <div className="sidebar-head">
           <strong>Sessions</strong>
-          <button onClick={openLocalShell} title="Open a local shell">＋</button>
+          <div className="add">
+            <button onClick={() => setMenuOpen((o) => !o)} title="Add">
+              ＋
+            </button>
+            {menuOpen && (
+              <div className="menu" onMouseLeave={() => setMenuOpen(false)}>
+                <button onClick={() => newHost(null)}>New host…</button>
+                <button onClick={newFolder}>New folder…</button>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    openLocalShell();
+                  }}
+                >
+                  Local shell
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         <div className="tree">
           {error && <div className="error">{error}</div>}
           {rootFolders.map(renderFolder)}
           {(hostsByFolder.get(null) ?? []).map(renderHost)}
           {workspace && workspace.store.hosts.length === 0 && (
-            <div className="empty">No saved hosts yet.</div>
+            <div className="empty">
+              No saved hosts yet.
+              <button className="primary" onClick={() => newHost(null)}>
+                Add a host
+              </button>
+            </div>
           )}
         </div>
         {workspace && !workspace.multiplexing && (
@@ -255,6 +392,20 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {editing && workspace && (
+        <HostEditor
+          host={editing.host}
+          isNew={editing.isNew}
+          folders={workspace.store.folders}
+          hosts={workspace.store.hosts}
+          onSaved={(h) => {
+            mergeHost(h);
+            setEditing(null);
+          }}
+          onCancel={() => setEditing(null)}
+        />
+      )}
     </div>
   );
 }

@@ -8,11 +8,13 @@
 //! discards everything), so a pane is closed only when the user closes it.
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
+use bhterm_core::prompt::{what_is_wanted, Wanted};
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -24,6 +26,19 @@ pub enum PtyEvent {
     /// A clean logout (0) closes the tab; anything else keeps it open with a
     /// Reconnect button, as the Swift build learned to do.
     Exit { code: Option<i32> },
+}
+
+/// Secrets this pane may type in answer to ssh's own prompts.
+#[derive(Default, Clone)]
+pub struct AuthSecrets {
+    pub password: Option<String>,
+    pub passphrase: Option<String>,
+}
+
+impl AuthSecrets {
+    fn is_empty(&self) -> bool {
+        self.password.is_none() && self.passphrase.is_none()
+    }
 }
 
 struct Session {
@@ -42,6 +57,7 @@ impl PtyRegistry {
     /// the reader thread. Taking a plain callback rather than a Tauri Channel
     /// keeps this testable without a running app — the command layer wraps the
     /// Channel.
+    #[allow(clippy::too_many_arguments)] // the pty genuinely needs all of them
     pub fn spawn(
         &self,
         id: String,
@@ -49,6 +65,7 @@ impl PtyRegistry {
         args: &[String],
         cols: u16,
         rows: u16,
+        auth: AuthSecrets,
         on_event: impl Fn(PtyEvent) -> bool + Send + 'static,
     ) -> Result<(), String> {
         let pty = native_pty_system();
@@ -84,6 +101,10 @@ impl PtyRegistry {
             .take_writer()
             .map_err(|e| format!("couldn't write to the pty: {e}"))?;
 
+        // A second writer handle, used only to answer ssh's auth prompts.
+        // Taken before `master` moves into the session below.
+        let fill_writer = if auth.is_empty() { None } else { pair.master.take_writer().ok() };
+
         self.sessions.lock().unwrap().insert(
             id.clone(),
             Session { master: pair.master, writer, child },
@@ -94,10 +115,12 @@ impl PtyRegistry {
         // worse than a thread.
         std::thread::spawn(move || {
             let mut buf = [0u8; 8192];
+            let mut filler = SecretFiller::new(auth, fill_writer);
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
+                        filler.observe(&buf[..n]);
                         if !on_event(PtyEvent::Output { data: B64.encode(&buf[..n]) }) {
                             break; // the receiver went away
                         }
@@ -150,6 +173,78 @@ impl PtyRegistry {
 
 pub type SharedRegistry = Arc<PtyRegistry>;
 
+/// Types a stored secret when ssh asks for it.
+///
+/// It watches only the tail of the stream, and only until the credentials are
+/// spent or the window closes — holding a password in memory for the life of
+/// a session that no longer needs it is pointless risk.
+struct SecretFiller {
+    auth: AuthSecrets,
+    writer: Option<Box<dyn Write + Send>>,
+    tail: Vec<u8>,
+    /// A passphrase can legitimately be asked more than once (a jump host and
+    /// the target each load the key); capped so a wrong one cannot loop.
+    remaining: u8,
+    started: Instant,
+}
+
+impl SecretFiller {
+    /// Enough to hold a prompt line; prompts are short and we only need the
+    /// last one.
+    const WINDOW: usize = 256;
+    /// After this, auth has either succeeded or is waiting on a human.
+    const GIVE_UP_AFTER: Duration = Duration::from_secs(180);
+
+    fn new(auth: AuthSecrets, writer: Option<Box<dyn Write + Send>>) -> Self {
+        SecretFiller { auth, writer, tail: Vec::new(), remaining: 3, started: Instant::now() }
+    }
+
+    fn observe(&mut self, chunk: &[u8]) {
+        if self.writer.is_none() || self.remaining == 0 {
+            return;
+        }
+        if self.started.elapsed() > Self::GIVE_UP_AFTER {
+            self.forget();
+            return;
+        }
+
+        self.tail.extend_from_slice(chunk);
+        if self.tail.len() > Self::WINDOW {
+            let drop = self.tail.len() - Self::WINDOW;
+            self.tail.drain(..drop);
+        }
+        let text = String::from_utf8_lossy(&self.tail).into_owned();
+
+        // Never answer a host-key question or a 2FA code with a stored
+        // secret — only the user can answer those.
+        let secret = match what_is_wanted(&text) {
+            Some(Wanted::Passphrase) => self.auth.passphrase.clone(),
+            Some(Wanted::Password) => self.auth.password.clone(),
+            Some(Wanted::Human) | None => None,
+        };
+        let Some(secret) = secret else { return };
+
+        if let Some(w) = self.writer.as_mut() {
+            let _ = w.write_all(secret.as_bytes());
+            let _ = w.write_all(b"\r");
+            let _ = w.flush();
+        }
+        self.remaining -= 1;
+        // Don't re-match the same prompt still sitting in the window.
+        self.tail.clear();
+        if self.remaining == 0 {
+            self.forget();
+        }
+    }
+
+    fn forget(&mut self) {
+        self.auth = AuthSecrets::default();
+        self.writer = None;
+        self.tail.clear();
+        self.remaining = 0;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,6 +267,7 @@ mod tests {
                 &["-c".to_string(), "echo hello-from-pty".to_string()],
                 80,
                 24,
+                AuthSecrets::default(),
                 move |e| tx.send(e).is_ok(),
             )
             .expect("spawn");
@@ -202,7 +298,15 @@ mod tests {
     fn a_closed_session_is_gone_and_writing_to_it_fails() {
         let registry = PtyRegistry::default();
         registry
-            .spawn("t2".into(), "/bin/sh", &["-c".into(), "sleep 30".into()], 80, 24, |_| true)
+            .spawn(
+                "t2".into(),
+                "/bin/sh",
+                &["-c".into(), "sleep 30".into()],
+                80,
+                24,
+                AuthSecrets::default(),
+                |_| true,
+            )
             .expect("spawn");
         assert!(registry.is_running("t2"));
 

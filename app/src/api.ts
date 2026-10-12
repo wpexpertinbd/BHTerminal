@@ -109,6 +109,15 @@ export const api = {
   sftpPrune: (keep: string[]) => invoke<void>("sftp_prune", { keep }),
 
   vncPrepare: (hostId: string) => invoke<string>("vnc_prepare", { hostId }),
+
+  /** `secret` null leaves a stored credential alone; "" deletes it. */
+  saveHost: (host: Host, secret: string | null) =>
+    invoke<Host>("save_host", { host, secret }),
+  /** Only whether something is stored — the secret itself never comes back. */
+  hostHasSecret: (hostId: string) => invoke<boolean>("host_has_secret", { hostId }),
+  deleteHost: (hostId: string) => invoke<void>("delete_host", { hostId }),
+  saveFolder: (folder: HostFolder) => invoke<HostFolder>("save_folder", { folder }),
+  deleteFolder: (folderId: string) => invoke<void>("delete_folder", { folderId }),
 };
 
 /** Remote paths are always "/"-separated whatever the local platform is. */
@@ -131,3 +140,31 @@ export function formatSize(bytes: number | null): string {
 }
 
 export { Channel };
+
+/** Swift wrote UUIDs uppercased and the Rust side keeps that, so new ids made
+ *  here must match or the two spellings would not compare equal. */
+export function newId(): string {
+  return crypto.randomUUID().toUpperCase();
+}
+
+export function blankHost(folderID: string | null): Host {
+  return {
+    id: newId(),
+    name: "",
+    hostname: "",
+    port: 22,
+    username: "",
+    authMethod: { password: {} },
+    connectionType: "ssh",
+    folderID,
+    jumpHostID: null,
+    sortOrder: 0,
+    notes: "",
+  };
+}
+
+export function authKind(m: AuthMethod): "password" | "privateKey" | "agent" {
+  if ("privateKey" in m) return "privateKey";
+  if ("agent" in m) return "agent";
+  return "password";
+}
