@@ -4,6 +4,7 @@ import { api, blankHost, newId, type Host, type HostFolder, type Workspace } fro
 import { HostEditor } from "./HostEditor";
 import { TransferSheet } from "./TransferSheet";
 import { useUpdateCheck } from "./useUpdateCheck";
+import { applyTheme, loadTheme, type ThemeChoice } from "./theme";
 import { SnippetBar } from "./SnippetBar";
 import { TunnelBar } from "./TunnelBar";
 import { TerminalPane } from "./TerminalPane";
@@ -80,6 +81,7 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [transfer, setTransfer] = useState<"export" | "restore" | "import" | null>(null);
   const [version, setVersion] = useState<string>("");
+  const [theme, setTheme] = useState<ThemeChoice>(loadTheme);
   /** Where the focused pane is recording, if it is. Read from Rust rather
    *  than tracked here, so it stays right across tab switches. */
   const [logPath, setLogPath] = useState<string | null>(null);
@@ -466,6 +468,24 @@ export default function App() {
                   Restore a backup…
                 </button>
                 <hr />
+                <div className="menu-seg">
+                  <span>Appearance</span>
+                  <div className="seg">
+                    {(["system", "light", "dark"] as ThemeChoice[]).map((t) => (
+                      <button
+                        key={t}
+                        className={theme === t ? "on" : ""}
+                        onClick={() => {
+                          setTheme(t);
+                          applyTheme(t);
+                        }}
+                      >
+                        {t === "system" ? "Auto" : t === "light" ? "Light" : "Dark"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <hr />
                 <button
                   onClick={() => {
                     setMenuOpen(false);
@@ -609,7 +629,7 @@ export default function App() {
           {tabs.map((t) => (
             <div
               key={t.key}
-              className={`tab-panes ${t.axis} ${t.broadcast && t.panes.length > 1 ? "broadcasting" : ""}`}
+              className={`tab-panes axis-${t.axis} ${t.broadcast && t.panes.length > 1 ? "broadcasting" : ""}`}
               style={{ display: t.key === activeTabKey ? "flex" : "none" }}
             >
               {t.panes.map((p) => (
