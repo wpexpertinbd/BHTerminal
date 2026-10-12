@@ -15,6 +15,7 @@ export interface Host {
   connectionType: "ssh" | "vnc";
   folderID: string | null;
   jumpHostID: string | null;
+  tunnels: TunnelRule[];
   sortOrder: number;
   notes: string;
 }
@@ -26,10 +27,37 @@ export interface HostFolder {
   sortOrder: number;
 }
 
+export interface Snippet {
+  id: string;
+  name: string;
+  command: string;
+  sortOrder: number;
+}
+
+export type TunnelKind = "local" | "remote" | "dynamic";
+
+export interface TunnelRule {
+  id: string;
+  name: string;
+  kind: TunnelKind;
+  listenHost: string;
+  listenPort: number;
+  destHost: string;
+  destPort: number;
+  enabled: boolean;
+}
+
+export interface TunnelStatus {
+  ruleId: string;
+  running: boolean;
+  /** Set once it has stopped: ssh's own reason. */
+  message: string | null;
+}
+
 export interface SessionStore {
   folders: HostFolder[];
   hosts: Host[];
-  snippets: { id: string; name: string; command: string; sortOrder: number }[];
+  snippets: Snippet[];
 }
 
 export interface Workspace {
@@ -172,6 +200,14 @@ export const api = {
   importPreview: (path: string) => invoke<ImportPreview>("import_preview", { path }),
   importApply: (path: string) => invoke<ImportResult>("import_apply", { path }),
 
+  saveSnippet: (snippet: Snippet) => invoke<Snippet>("save_snippet", { snippet }),
+  deleteSnippet: (snippetId: string) => invoke<void>("delete_snippet", { snippetId }),
+
+  tunnelStart: (hostId: string, ruleId: string) =>
+    invoke<void>("tunnel_start", { hostId, ruleId }),
+  tunnelStop: (ruleId: string) => invoke<void>("tunnel_stop", { ruleId }),
+  tunnelStatus: (ruleIds: string[]) => invoke<TunnelStatus[]>("tunnel_status", { ruleIds }),
+
   updateQuery: () => invoke<UpdateQuery>("update_query"),
   /** null = nothing newer. A FAILED check throws, and must never be shown as
    *  "up to date" — that hides the real state. */
@@ -217,6 +253,7 @@ export function blankHost(folderID: string | null): Host {
     connectionType: "ssh",
     folderID,
     jumpHostID: null,
+    tunnels: [],
     sortOrder: 0,
     notes: "",
   };
@@ -226,4 +263,19 @@ export function authKind(m: AuthMethod): "password" | "privateKey" | "agent" {
   if ("privateKey" in m) return "privateKey";
   if ("agent" in m) return "agent";
   return "password";
+}
+
+export function blankTunnel(): TunnelRule {
+  return {
+    id: newId(),
+    name: "",
+    kind: "local",
+    // Loopback, not 0.0.0.0: a forward bound to every interface exposes the
+    // remote service to the whole network the laptop is on.
+    listenHost: "127.0.0.1",
+    listenPort: 8080,
+    destHost: "127.0.0.1",
+    destPort: 80,
+    enabled: true,
+  };
 }

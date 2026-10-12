@@ -3,6 +3,8 @@ import { api, blankHost, newId, type Host, type HostFolder, type Workspace } fro
 import { HostEditor } from "./HostEditor";
 import { TransferSheet } from "./TransferSheet";
 import { useUpdateCheck } from "./useUpdateCheck";
+import { SnippetBar } from "./SnippetBar";
+import { TunnelBar } from "./TunnelBar";
 import { TerminalPane } from "./TerminalPane";
 import { FilePane } from "./FilePane";
 import { VncPane } from "./VncPane";
@@ -267,6 +269,8 @@ export default function App() {
   }
 
   const active = panes.find((p) => p.key === activeKey) ?? null;
+  const activeHost =
+    workspace && active?.hostId ? workspace.store.hosts.find((h) => h.id === active.hostId) : undefined;
 
   // SFTP rides the terminal's connection, so drop sessions whose host has no
   // tab left open.
@@ -332,6 +336,24 @@ export default function App() {
             </div>
           )}
         </div>
+        {workspace && (
+          <SnippetBar
+            snippets={workspace.store.snippets}
+            onSend={
+              // Only when a terminal is in front — a snippet goes to a shell.
+              active && active.kind === "terminal" && !active.exited
+                ? (command) => {
+                    const id = paneIds.get(active.key);
+                    if (id) api.write(id, command).catch((e) => setError(String(e)));
+                  }
+                : null
+            }
+            onChanged={(snippets) =>
+              setWorkspace((w) => (w ? { ...w, store: { ...w.store, snippets } } : w))
+            }
+          />
+        )}
+
         {update.available && (
           <div className="update">
             <strong>BHTerminal {update.available.version} is out.</strong>
@@ -382,6 +404,8 @@ export default function App() {
             </div>
           ))}
         </div>
+
+        {activeHost && activeHost.connectionType === "ssh" && <TunnelBar host={activeHost} />}
 
         <div className={`panes ${active?.hostId && active.kind === "terminal" && !active.exited ? "with-files" : ""}`}>
           {panes.length === 0 && (

@@ -7,6 +7,7 @@ mod paths;
 mod pty;
 mod sftp_session;
 mod transfer;
+mod tunnels;
 mod updater;
 mod vault;
 mod vnc_bridge;
@@ -15,6 +16,7 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use bhterm_core::{ssh, SessionStore};
 use pty::{AuthSecrets, PtyEvent, PtyRegistry, SharedRegistry};
 use sftp_session::{Listing, SftpRegistry, SharedSftp};
+use tunnels::{SharedTunnels, TunnelRegistry};
 use vault::{SharedVault, Vault};
 use vnc_bridge::{SharedVnc, VncBridge};
 use serde::Serialize;
@@ -273,6 +275,70 @@ fn delete_folder(
     vault.remove(&freed)
 }
 
+
+// ── snippets ───────────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn save_snippet(snippet: bhterm_core::Snippet) -> Result<bhterm_core::Snippet, String> {
+    let mut store = load_store()?;
+    let saved = if store.snippets.iter().any(|s| s.id == snippet.id) {
+        store.update_snippet(snippet.clone());
+        snippet
+    } else {
+        store.add_snippet(snippet)
+    };
+    save_store(&store)?;
+    Ok(saved)
+}
+
+#[tauri::command]
+fn delete_snippet(snippet_id: String) -> Result<(), String> {
+    let id: Uuid = snippet_id.parse().map_err(|_| "bad snippet id".to_string())?;
+    let mut store = load_store()?;
+    store.delete_snippet(id);
+    save_store(&store)
+}
+
+// ── port forwards ──────────────────────────────────────────────────────────
+
+/// Starts one of a host's own tunnel rules. The rule is read from the store
+/// rather than taken from the caller, so the listen and destination ports are
+/// the ones that were saved and reviewed.
+#[tauri::command]
+fn tunnel_start(
+    tunnels: tauri::State<'_, SharedTunnels>,
+    host_id: String,
+    rule_id: String,
+) -> Result<(), String> {
+    let host_id: Uuid = host_id.parse().map_err(|_| "bad host id".to_string())?;
+    let rule_id: Uuid = rule_id.parse().map_err(|_| "bad rule id".to_string())?;
+    let store = load_store()?;
+    let host = store.host(host_id).ok_or("no such host")?.clone();
+    let rule = host
+        .tunnels
+        .iter()
+        .find(|t| t.id == rule_id)
+        .ok_or("no such tunnel on that host")?
+        .clone();
+    let jump = ssh::resolve_jump(&store.hosts, host.jump_host_id).cloned();
+
+    let socket_dir = paths::control_socket_dir().map_err(|e| e.to_string())?;
+    tunnels.start(&host, jump.as_ref(), &rule, Some(&socket_dir))
+}
+
+#[tauri::command]
+fn tunnel_stop(tunnels: tauri::State<'_, SharedTunnels>, rule_id: String) {
+    tunnels.stop(&rule_id);
+}
+
+#[tauri::command]
+fn tunnel_status(
+    tunnels: tauri::State<'_, SharedTunnels>,
+    rule_ids: Vec<String>,
+) -> Vec<tunnels::TunnelStatus> {
+    tunnels.status(&rule_ids)
+}
+
 // ── SFTP ───────────────────────────────────────────────────────────────────
 
 /// Builds the SFTP argv for a host and opens (or reuses) its session.
@@ -434,6 +500,7 @@ pub fn run() {
     let registry: SharedRegistry = Arc::new(PtyRegistry::default());
     let sftp: SharedSftp = Arc::new(SftpRegistry::default());
     let vnc: SharedVnc = Arc::new(VncBridge::default());
+    let tunnels: SharedTunnels = Arc::new(TunnelRegistry::default());
     // An unreadable vault must stop the app rather than silently present an
     // empty one — the next save would overwrite every stored credential.
     let data_dir = paths::data_dir().expect("cannot create the application data directory");
@@ -448,6 +515,7 @@ pub fn run() {
         .manage(sftp.clone())
         .manage(vnc)
         .manage(vault)
+        .manage(tunnels.clone())
         .invoke_handler(tauri::generate_handler![
             load_workspace,
             save_workspace,
@@ -480,6 +548,11 @@ pub fn run() {
             updater::update_query,
             updater::update_evaluate,
             updater::update_open,
+            save_snippet,
+            delete_snippet,
+            tunnel_start,
+            tunnel_stop,
+            tunnel_status,
         ])
         .on_window_event(move |window, event| {
             // Every pane is a child ssh process; leaving them behind would
@@ -488,6 +561,7 @@ pub fn run() {
                 if window.webview_windows().len() <= 1 {
                     registry.close_all();
                     sftp.disconnect_all();
+                    tunnels.stop_all();
                 }
             }
         })

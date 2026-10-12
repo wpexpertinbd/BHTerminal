@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { open as openFile } from "@tauri-apps/plugin-dialog";
-import { api, authKind, type AuthMethod, type Host, type HostFolder } from "./api";
+import { api, authKind, blankTunnel, type AuthMethod, type Host, type HostFolder, type TunnelRule } from "./api";
 
 interface Props {
   host: Host;
@@ -59,6 +59,21 @@ export function HostEditor({ host, isNew, folders, hosts, onSaved, onCancel }: P
     setClearSecret(false);
   }
 
+  function setTunnel(index: number, patch: Partial<TunnelRule>) {
+    setDraft((d) => ({
+      ...d,
+      tunnels: (d.tunnels ?? []).map((t, i) => (i === index ? { ...t, ...patch } : t)),
+    }));
+  }
+
+  function addTunnel() {
+    setDraft((d) => ({ ...d, tunnels: [...(d.tunnels ?? []), blankTunnel()] }));
+  }
+
+  function removeTunnel(index: number) {
+    setDraft((d) => ({ ...d, tunnels: (d.tunnels ?? []).filter((_, i) => i !== index) }));
+  }
+
   async function browseKey() {
     const picked = await openFile({
       multiple: false,
@@ -75,6 +90,14 @@ export function HostEditor({ host, isNew, folders, hosts, onSaved, onCancel }: P
     if (!isVnc && !draft.username.trim()) return setError("A username is required for SSH.");
     if (kind === "privateKey" && !(draft.authMethod as { privateKey: { path: string } }).privateKey.path) {
       return setError("Choose a private key file, or switch to password or agent.");
+    }
+    for (const t of draft.tunnels ?? []) {
+      if (t.listenPort < 1 || t.listenPort > 65535) {
+        return setError("A forward needs a listen port between 1 and 65535.");
+      }
+      if (t.kind !== "dynamic" && (!t.destHost.trim() || t.destPort < 1 || t.destPort > 65535)) {
+        return setError("A local or remote forward needs a destination host and port.");
+      }
     }
     setBusy(true);
     setError(null);
@@ -245,6 +268,57 @@ export function HostEditor({ host, isNew, folders, hosts, onSaved, onCancel }: P
             </label>
           )}
         </div>
+
+        {!isVnc && (
+          <div className="field">
+            <span>Port forwards</span>
+            {(draft.tunnels ?? []).map((t, i) => (
+              <div className="tunnel-row" key={t.id}>
+                <select value={t.kind} onChange={(e) => setTunnel(i, { kind: e.target.value as TunnelRule["kind"] })}>
+                  <option value="local">Local (-L)</option>
+                  <option value="remote">Remote (-R)</option>
+                  <option value="dynamic">SOCKS (-D)</option>
+                </select>
+                <input
+                  type="number"
+                  className="port"
+                  value={t.listenPort}
+                  title="Listen port"
+                  onChange={(e) => setTunnel(i, { listenPort: Number(e.target.value) || 0 })}
+                />
+                {t.kind !== "dynamic" && (
+                  <>
+                    <span className="arrow">→</span>
+                    <input
+                      value={t.destHost}
+                      placeholder="127.0.0.1"
+                      title="Destination host, as seen from the other end"
+                      onChange={(e) => setTunnel(i, { destHost: e.target.value })}
+                    />
+                    <input
+                      type="number"
+                      className="port"
+                      value={t.destPort}
+                      title="Destination port"
+                      onChange={(e) => setTunnel(i, { destPort: Number(e.target.value) || 0 })}
+                    />
+                  </>
+                )}
+                <button title="Remove" onClick={() => removeTunnel(i)}>
+                  🗑
+                </button>
+              </div>
+            ))}
+            <button className="add-row" onClick={addTunnel}>
+              + Add a forward
+            </button>
+            <small>
+              Forwards listen on 127.0.0.1 and start by hand from the tab's toolbar. A local
+              forward brings a remote port to this machine; SOCKS makes a proxy you can point a
+              browser at.
+            </small>
+          </div>
+        )}
 
         <label className="field">
           <span>Notes</span>

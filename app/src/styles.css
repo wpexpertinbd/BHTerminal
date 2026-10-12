@@ -239,3 +239,39 @@ body {
 }
 .update-actions .primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 /* END BHTERM-UPDATE */
+
+/* BHTERM-TUNNELS */
+.tunnel-row { display: flex; gap: 5px; align-items: center; margin-bottom: 5px; }
+.tunnel-row select, .tunnel-row input {
+  font: inherit; font-size: 12px; padding: 4px 6px; border: 1px solid var(--line);
+  border-radius: 5px; background: #fff; min-width: 0;
+}
+.tunnel-row input { flex: 1; }
+.tunnel-row input.port { flex: 0 0 68px; }
+.tunnel-row .arrow { color: var(--muted); font-size: 12px; }
+.tunnel-row button { border: 0; background: transparent; cursor: pointer; font-size: 11px; opacity: .7; }
+.tunnel-row button:hover { opacity: 1; }
+.add-row {
+  font: inherit; font-size: 12px; border: 1px dashed var(--line); background: transparent;
+  border-radius: 5px; padding: 4px 9px; cursor: pointer; color: var(--accent);
+}
+.tunnel-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 5px 10px; background: var(--sidebar); border-bottom: 1px solid var(--line);
+  font-size: 11.5px;
+}
+.tunnel-chip { display: flex; align-items: center; gap: 5px; }
+.tunnel-chip button {
+  font: inherit; font-size: 11px; padding: 2px 8px; border: 1px solid var(--line);
+  background: #fff; border-radius: 5px; cursor: pointer;
+}
+.tunnel-chip .dot { width: 7px; height: 7px; }
+.tunnel-chip .why { color: #b00020; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* END BHTERM-TUNNELS */
+
+/* BHTERM-SNIPPETS */
+.snippets { border-top: 1px solid var(--line); }
+.snippets .host-sub { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.snippets .empty { padding: 6px 12px; }
+.tunnel-bar .muted { color: var(--muted); }
+/* END BHTERM-SNIPPETS */

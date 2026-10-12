@@ -116,3 +116,73 @@ fn hostname_and_username_allow_lists() {
     assert!(ssh::is_valid_username("deploy_user-1.svc"));
     assert!(!ssh::is_valid_username("a b"));
 }
+
+// ── port forwards ──────────────────────────────────────────────────────────
+
+fn rule(kind: bhterm_core::TunnelKind) -> bhterm_core::TunnelRule {
+    bhterm_core::TunnelRule {
+        id: uuid::Uuid::new_v4(),
+        name: String::new(),
+        kind,
+        listen_host: "127.0.0.1".into(),
+        listen_port: 8080,
+        dest_host: "10.0.0.5".into(),
+        dest_port: 80,
+        enabled: true,
+    }
+}
+
+#[test]
+fn forward_specs_match_ssh_s_own_syntax() {
+    use bhterm_core::TunnelKind;
+
+    let local = ssh::build_tunnel(&host(), None, &rule(TunnelKind::Local), None).unwrap();
+    assert!(pair(&local, "-L", "127.0.0.1:8080:10.0.0.5:80"), "{local:?}");
+
+    let remote = ssh::build_tunnel(&host(), None, &rule(TunnelKind::Remote), None).unwrap();
+    assert!(pair(&remote, "-R", "127.0.0.1:8080:10.0.0.5:80"), "{remote:?}");
+
+    // A SOCKS proxy has no destination — naming one would be meaningless.
+    let dynamic = ssh::build_tunnel(&host(), None, &rule(TunnelKind::Dynamic), None).unwrap();
+    assert!(pair(&dynamic, "-D", "127.0.0.1:8080"), "{dynamic:?}");
+    assert!(!dynamic.iter().any(|a| a.contains("10.0.0.5")));
+}
+
+#[test]
+fn a_forward_carries_no_remote_command_and_ends_at_the_destination() {
+    let args = ssh::build_tunnel(&host(), None, &rule(bhterm_core::TunnelKind::Local), None).unwrap();
+    assert!(args.contains(&"-N".to_string()), "a forward runs no command: {args:?}");
+    assert_eq!(&args[args.len() - 2..], &["--".to_string(), "root@example.com".into()]);
+}
+
+#[test]
+fn a_forward_joins_the_shared_connection_but_never_becomes_its_master() {
+    let dir = Path::new("/tmp/bhterm-test-cm");
+    let cm = ControlMaster { socket_dir: dir };
+    let args = ssh::build_tunnel(&host(), None, &rule(bhterm_core::TunnelKind::Local), Some(&cm)).unwrap();
+
+    if ssh::multiplexing_supported() {
+        assert!(
+            pair(&args, "-o", &format!("ControlPath={}", dir.join("%C").display())),
+            "a forward on a host with a live terminal must not log in again: {args:?}"
+        );
+        // A forward outliving the session that authenticated it is not what
+        // closing the tab is supposed to mean.
+        assert!(!args.iter().any(|a| a.starts_with("ControlMaster")), "{args:?}");
+        assert!(!args.iter().any(|a| a.starts_with("ControlPersist")), "{args:?}");
+    } else {
+        // Windows OpenSSH has no multiplexing; passing the options would make
+        // ssh fail outright.
+        assert!(!args.iter().any(|a| a.starts_with("ControlPath")), "{args:?}");
+    }
+}
+
+#[test]
+fn a_forward_refuses_an_option_shaped_hostname() {
+    let mut h = host();
+    h.hostname = "-oProxyCommand=curl evil.example".into();
+    assert!(matches!(
+        ssh::build_tunnel(&h, None, &rule(bhterm_core::TunnelKind::Local), None),
+        Err(SshSafetyError::UnsafeHostname(_))
+    ));
+}

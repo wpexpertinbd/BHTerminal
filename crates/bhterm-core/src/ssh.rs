@@ -187,13 +187,21 @@ pub fn build_sftp(
 }
 
 /// argv for a port-forward, run as its own background ssh.
+///
+/// It joins the existing shared connection when there is one, so starting a
+/// forward while a terminal is open to that host needs no second login — and
+/// therefore no password prompt on a connection that has no terminal to show
+/// it in. It never becomes the master itself: a forward outliving the session
+/// that authenticated it is not what anyone means by "close the tab".
 pub fn build_tunnel(
     host: &Host,
     jump: Option<&Host>,
     rule: &TunnelRule,
+    cm: Option<&ControlMaster>,
 ) -> Result<Vec<String>, SshSafetyError> {
     validate(host, jump)?;
     let mut args = shared_options(host, jump);
+    args.extend(control_args(cm, false));
     let spec = match rule.kind {
         TunnelKind::Local => format!(
             "{}:{}:{}:{}",
