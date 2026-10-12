@@ -8,6 +8,7 @@ import { useUpdateCheck } from "./useUpdateCheck";
 import { useResizablePanes } from "./useResizablePanes";
 import { loadFont, loadTheme, resolvedMode, saveFont, watchSystemMode, type TerminalFont, type ThemeChoice } from "./theme";
 import { AppearanceSheet } from "./AppearanceSheet";
+import { MasterPasswordSheet } from "./MasterPassword";
 import { SnippetBar } from "./SnippetBar";
 import { TunnelBar } from "./TunnelBar";
 import { TerminalPane } from "./TerminalPane";
@@ -96,6 +97,7 @@ export default function App() {
   const [mode, setMode] = useState<"light" | "dark">(() => resolvedMode(loadTheme()));
   const [font, setFont] = useState<TerminalFont>(loadFont);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [masterOpen, setMasterOpen] = useState(false);
   /** Where the focused pane is recording, if it is. Read from Rust rather
    *  than tracked here, so it stays right across tab switches. */
   const [logPath, setLogPath] = useState<string | null>(null);
@@ -536,6 +538,14 @@ export default function App() {
                 >
                   Appearance…
                 </button>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setMasterOpen(true);
+                  }}
+                >
+                  Master password…
+                </button>
                 <hr />
                 <button
                   onClick={() => {
@@ -807,6 +817,7 @@ export default function App() {
         )}
       </main>
 
+      {masterOpen && <MasterPasswordSheet onClose={() => setMasterOpen(false)} />}
       {appearanceOpen && (
         <AppearanceSheet
           theme={theme}

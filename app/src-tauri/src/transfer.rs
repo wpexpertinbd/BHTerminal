@@ -73,14 +73,21 @@ fn save_store(store: &SessionStore) -> Result<(), String> {
 /// them in the clear would undo the point of the vault — which is why the
 /// passphrase is required in that case rather than merely offered.
 #[tauri::command]
-pub fn backup_export(
+pub async fn backup_export(
     vault: tauri::State<'_, SharedVault>,
     path: String,
     include_secrets: bool,
     passphrase: Option<String>,
+    master_password: Option<String>,
 ) -> Result<usize, String> {
+    // With a master password set, taking the saved passwords OUT of the
+    // computer needs it — otherwise anyone at an unlocked, unattended app
+    // could export every credential under a passphrase of their own.
+    if include_secrets {
+        crate::vault::blocking(&vault, move |v| v.check_export(master_password.as_deref())).await?;
+    }
     let store = load_store()?;
-    let snapshot = include_secrets.then(|| vault.snapshot());
+    let snapshot = if include_secrets { Some(vault.snapshot()?) } else { None };
     let payload = backup::snapshot(&store, snapshot.as_ref());
     let count = payload.secrets.as_ref().map_or(0, |s| s.len());
 

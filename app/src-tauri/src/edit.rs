@@ -54,9 +54,25 @@ pub fn scratch_path(host_id: &str, remote: &str) -> Result<PathBuf, String> {
     Ok(dir.join(if safe.is_empty() { "file".to_string() } else { safe }))
 }
 
+/// The built-in editor only ever opens the staged copy of a REMOTE file, so
+/// the read and write commands are held to the scratch directory. Left open,
+/// they were a way for anything driving the webview to read or overwrite any
+/// file the user can — the vault included. Canonicalised, so `..` and
+/// symlinks cannot walk back out; the file must already exist (it was staged).
+fn inside_scratch(path: &str) -> Result<PathBuf, String> {
+    let root = scratch_dir()?.canonicalize().map_err(|e| e.to_string())?;
+    let target = Path::new(path).canonicalize().map_err(|e| format!("{path}: {e}"))?;
+    if !target.starts_with(&root) || target == root {
+        return Err("the editor only opens files staged from a server".into());
+    }
+    Ok(target)
+}
+
 /// Text, or a reason it should not be opened in a text box.
 #[tauri::command]
 pub fn read_text_file(path: String) -> Result<String, String> {
+    let path = inside_scratch(&path)?;
+    let path = path.to_string_lossy().to_string();
     let meta = std::fs::metadata(&path).map_err(|e| format!("{path}: {e}"))?;
     if meta.len() > MAX_EDIT_BYTES {
         return Err(format!(
@@ -77,7 +93,8 @@ pub fn read_text_file(path: String) -> Result<String, String> {
 
 #[tauri::command]
 pub fn write_text_file(path: String, contents: String) -> Result<(), String> {
-    std::fs::write(&path, contents).map_err(|e| format!("{path}: {e}"))
+    let path = inside_scratch(&path)?;
+    std::fs::write(&path, contents).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// Seconds-resolution mtime, for noticing that another app saved the file.

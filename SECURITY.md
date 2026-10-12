@@ -9,11 +9,18 @@ Please **do not** open a public issue for security problems. Email
 [BiswasHost](https://www.biswashost.com)) with details and steps to reproduce.
 You'll get a response as soon as possible.
 
-## How BHTerminal protects your data (macOS build)
+## How BHTerminal protects your data
 
-- **Passwords and key passphrases live only in the macOS Keychain** — never in
-  the app's `sessions.json`, never in logs. The config file stores only a host's
-  UUID, which the app uses to look the secret up.
+- **Passwords and key passphrases live only in an encrypted vault file**
+  (`secrets.json`, AES-GCM, owner-only) — never in the app's `sessions.json`,
+  never in logs. The config file stores only a host's UUID, which the app uses
+  to look the secret up. (Not the OS keychain: a self-signed app looks like a
+  new application to the macOS Keychain after every update, so it re-prompted
+  constantly.)
+- **A saved password belongs to the server it was saved for.** Changing a
+  host's address, port, user or jump host forgets its saved password unless a
+  new one is typed — so a host cannot be quietly re-pointed at someone else's
+  server to collect the real password.
 - **The terminal runs your system `/usr/bin/ssh`** inside a pty, so host-key
   verification, known-hosts, your keys, and your SSH agent all work exactly as
   they do in Terminal.app. BHTerminal does not reimplement the SSH transport for
@@ -53,11 +60,40 @@ BHTerminal does not download or run an installer itself. It hands the URL to you
 browser, so you can see what you are getting and where it came from before anything
 is installed — which matters more than usual for an app that is self-signed.
 
+## Master password
+
+Optional, and asked about once. Without one, the vault's key sits beside it in
+an owner-only file and the app unlocks by itself: that protects a **copy** of
+the data folder (a backup, a synced folder), not someone using your account.
+
+With one, the key is sealed under the master password (PBKDF2-HMAC-SHA256,
+600,000 iterations, AES-GCM). "Remember on this computer" (off by default)
+keeps the plain key on that computer, which is the same protection as having no
+master password there; left off, nothing on disk opens the vault until the
+password is typed. Setting, changing or un-remembering it moves the vault to a
+**new** key, so an old copy of the plain key opens nothing saved since.
+Changing it, removing it, and exporting saved passwords all need it.
+
+What it does **not** do, stated plainly:
+
+- It is asked when BHTerminal **starts**. Closing the window keeps the app
+  running in the menu bar, unlocked; quit it to lock.
+- While unlocked, the app is your account: it has a local shell. Lock your
+  computer when you walk away.
+- The host list (`sessions.json`) is not encrypted — names and addresses are
+  visible without the master password, and "Forgot it?" opens the app with the
+  host list and an empty password store. The locked passwords are moved aside,
+  not destroyed.
+- A forgotten master password **cannot be recovered**, by you or by BHTerminal.
+- Anyone at an unlocked app with no master password set can set one — and lock
+  you out of the saved passwords. Set one yourself if that matters to you.
+
 ## Backups
 
 A backup holding saved passwords is always encrypted (AES-GCM under a PBKDF2 key,
-210,000 iterations) and the passphrase is required, not optional — writing secrets
-in the clear would undo the vault. Backup files are written owner-only (0600 on
+600,000 iterations) and a password is required — the master password by default
+when one is set, or a passphrase of your own. It is not optional: writing
+secrets in the clear would undo the vault. Backup files are written owner-only (0600 on
 macOS and Linux). A backup exported WITHOUT secrets is plain, readable JSON and
 contains no credentials at all; that is the one to use for moving a host list
 between computers.
@@ -79,4 +115,4 @@ it once via **System Settings → Privacy & Security → Open Anyway**. See the 
 
 MobaXterm's stored-passwords export is a **plaintext** file containing all your
 passwords. After importing it into BHTerminal, **delete it** — the app's copy is
-safe in the Keychain.
+safe in its encrypted vault.

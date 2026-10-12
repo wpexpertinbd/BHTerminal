@@ -15,6 +15,13 @@ use thiserror::Error;
 
 pub const KDF_ALGORITHM: &str = "PBKDF2-HMAC-SHA256";
 pub const KDF_ITERATIONS: u32 = 210_000;
+/// Backups leave the computer, so they get the stronger count the master
+/// password lock uses — a backup encrypted with the master password must not
+/// be the cheaper place to guess it. Older backups name their own count.
+pub const BACKUP_ITERATIONS: u32 = 600_000;
+/// A file names its own iteration count; a doctored one asking for billions
+/// would hang whatever opens it, so anything past this is refused.
+pub const MAX_ITERATIONS: u32 = 10_000_000;
 const SALT_LEN: usize = 16;
 const NONCE_LEN: usize = 12;
 

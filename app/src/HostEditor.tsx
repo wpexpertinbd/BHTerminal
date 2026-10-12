@@ -33,6 +33,15 @@ export function HostEditor({ host, isNew, folders, hosts, onSaved, onCancel }: P
     api.hostHasSecret(host.id).then(setStored).catch(() => {});
   }, [host.id, isNew]);
 
+  /** Mirrors save_host: a secret is never carried to a different server. */
+  const retargeted =
+    !isNew &&
+    (draft.hostname.trim() !== host.hostname ||
+      draft.port !== host.port ||
+      draft.username !== host.username ||
+      draft.connectionType !== host.connectionType ||
+      draft.jumpHostID !== host.jumpHostID);
+
   const kind = authKind(draft.authMethod);
   const keyPath =
     kind === "privateKey" ? (draft.authMethod as { privateKey: { path: string } }).privateKey.path : "";
@@ -253,6 +262,12 @@ export function HostEditor({ host, isNew, folders, hosts, onSaved, onCancel }: P
                 />
                 <span>Forget the saved {secretLabel.toLowerCase()}</span>
               </label>
+            )}
+            {stored && !secret && !clearSecret && retargeted && (
+              <p className="hint warn">
+                The server changed, so the saved {secretLabel.toLowerCase()} will be forgotten.
+                Type it again here to keep one.
+              </p>
             )}
             <small>
               Stored encrypted on this computer. Leave it empty and BHTerminal will let the

@@ -192,3 +192,26 @@ fn an_empty_payload_is_harmless() {
     let bytes = backup::encode(&p, false, None, "t", "2.0.0").unwrap();
     assert_eq!(backup::decode(&bytes, None).unwrap().hosts.len(), 0);
 }
+
+#[test]
+fn a_secret_follows_its_destination_not_its_label() {
+    let base = Host::new("s1", "s1.example.com", "root");
+    let mut same = base.clone();
+    same.name = "renamed".into();
+    same.notes = "moved folders, added notes".into();
+    same.folder_id = Some(Uuid::new_v4());
+    assert!(base.same_destination(&same), "a rename must keep the saved password");
+
+    let changes: [fn(&mut Host); 5] = [
+        |h| h.hostname = "attacker.example".into(),
+        |h| h.port = 2222,
+        |h| h.username = "admin".into(),
+        |h| h.connection_type = bhterm_core::ConnectionType::Vnc,
+        |h| h.jump_host_id = Some(Uuid::new_v4()),
+    ];
+    for change in changes {
+        let mut moved = base.clone();
+        change(&mut moved);
+        assert!(!base.same_destination(&moved));
+    }
+}

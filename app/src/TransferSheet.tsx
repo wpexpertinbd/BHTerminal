@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { open as openFile, save as saveFile } from "@tauri-apps/plugin-dialog";
 import { api } from "./api";
 
@@ -27,9 +27,28 @@ export function TransferSheet({ mode, onChanged, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string[] | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  /** null until known: the export form must not guess, or a slow check
+   *  shows the passphrase form and the backend then refuses for a master
+   *  password the user was never asked for. */
+  const [hasMaster, setHasMaster] = useState<boolean | null>(null);
+  const [master, setMaster] = useState("");
+  /** Like MobaXterm: by default the archive is locked with the master
+   *  password itself, so there is one password to remember, not two. */
+  const [useMaster, setUseMaster] = useState(true);
+
+  useEffect(() => {
+    api
+      .vaultStatus()
+      .then((s) => setHasMaster(s.hasMaster))
+      .catch((e) => setError(`Couldn't check the master password: ${e}`));
+  }, []);
+  const masterLocksFile = hasMaster === true && useMaster;
 
   async function runExport() {
-    if (includeSecrets) {
+    if (includeSecrets && hasMaster && !master) {
+      return setError("Enter your master password to export saved passwords.");
+    }
+    if (includeSecrets && !masterLocksFile) {
       // Secrets force encryption, so the passphrase is the archive's only
       // protection — a typo in it makes the file permanently unreadable.
       if (passphrase.length < 8) return setError("Use a passphrase of at least 8 characters.");
@@ -43,11 +62,21 @@ export function TransferSheet({ mode, onChanged, onClose }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const secrets = await api.backupExport(path, includeSecrets, includeSecrets ? passphrase : null);
+      const filePassword = masterLocksFile ? master : passphrase;
+      const secrets = await api.backupExport(
+        path,
+        includeSecrets,
+        includeSecrets ? filePassword : null,
+        includeSecrets && hasMaster ? master : null
+      );
+      // The passwords have done their job; don't keep them in memory.
+      setMaster("");
+      setPassphrase("");
+      setConfirm("");
       setDone([
         `Saved to ${path}`,
         includeSecrets
-          ? `${secrets} saved password${secrets === 1 ? "" : "s"} included, encrypted. Keep the passphrase — there is no way to recover the file without it.`
+          ? `${secrets} saved password${secrets === 1 ? "" : "s"} included, encrypted with ${masterLocksFile ? "your master password" : "the passphrase you chose"}. There is no way to open the file without it.`
           : "Hosts, folders and snippets only — no passwords. The file is plain readable JSON.",
       ]);
     } catch (e) {
@@ -135,7 +164,7 @@ export function TransferSheet({ mode, onChanged, onClose }: Props) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={busy ? undefined : onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>{TITLES[mode]}</h2>
 
@@ -160,19 +189,37 @@ export function TransferSheet({ mode, onChanged, onClose }: Props) {
               <input
                 type="checkbox"
                 checked={includeSecrets}
+                disabled={hasMaster === null}
                 onChange={(e) => setIncludeSecrets(e.target.checked)}
               />
               <span>Include saved passwords and key passphrases</span>
             </label>
-            {includeSecrets ? (
+            {includeSecrets && hasMaster && (
+              <>
+                <label className="field">
+                  <span>Your master password</span>
+                  <input type="password" autoComplete="current-password" value={master} autoFocus onChange={(e) => setMaster(e.target.value)} />
+                </label>
+                <label className="check">
+                  <input type="checkbox" checked={useMaster} onChange={(e) => setUseMaster(e.target.checked)} />
+                  <span>Encrypt the file with my master password</span>
+                </label>
+                {useMaster && (
+                  <p className="hint">
+                    Restoring it — here or on another computer — will ask for this master password.
+                  </p>
+                )}
+              </>
+            )}
+            {includeSecrets && masterLocksFile ? null : includeSecrets ? (
               <>
                 <label className="field">
                   <span>Passphrase for the archive</span>
-                  <input type="password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} />
+                  <input type="password" autoComplete="new-password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} />
                 </label>
                 <label className="field">
                   <span>Again</span>
-                  <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+                  <input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
                   <small>
                     Secrets are only ever written encrypted. Nobody — including BHTerminal — can open
                     the file without this passphrase.
@@ -189,7 +236,7 @@ export function TransferSheet({ mode, onChanged, onClose }: Props) {
         ) : mode === "restore" ? (
           needsPassphrase ? (
             <label className="field">
-              <span>This backup is encrypted. Passphrase?</span>
+              <span>This backup is encrypted. Enter its password — the master password it was exported with, or the passphrase chosen then.</span>
               <input
                 type="password"
                 value={passphrase}

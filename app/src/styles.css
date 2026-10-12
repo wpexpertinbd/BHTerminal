@@ -608,3 +608,23 @@ body.resizing * { cursor: col-resize !important; }
 }
 .xterm-viewport::-webkit-scrollbar-thumb:hover { background: var(--term-scroll-hover); background-clip: content-box; }
 /* END BHTERM-TERM-SCROLLBAR */
+
+/* BHTERM-MASTER-PASSWORD */
+.lock-screen {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: var(--bg); padding: 16px; z-index: 60;
+}
+.lock-card { width: 380px; }
+.hint { font-size: 11px; color: var(--muted); margin: 6px 0 10px; line-height: 1.4; }
+.sheet-section { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+.modal-actions.spread { align-items: center; }
+.modal-actions .grow { flex: 1; }
+.modal-actions.spread > .link:first-child,
+.modal-actions.spread > .danger:first-child { margin-right: auto; }
+.modal-actions button.link {
+  border: 0; background: none; padding: 6px 0; color: var(--accent); cursor: pointer;
+}
+.modal-actions button.danger { color: var(--danger); border-color: var(--danger); }
+.modal-actions button.danger:hover:not(:disabled) { background: var(--danger-fill); color: #fff; }
+.hint.warn { color: var(--warn-text); }
+/* END BHTERM-MASTER-PASSWORD */

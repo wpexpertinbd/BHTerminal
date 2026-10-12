@@ -36,3 +36,6 @@ tokio = { version = "1", features = ["net", "io-util", "rt", "time", "macros"] }
 tokio-tungstenite = "0.28"
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 rand = "0.8"
+
+[dev-dependencies]
+tempfile = "3"

@@ -180,6 +180,18 @@ impl Host {
         format!("host.{}.passphrase", id.to_string().to_uppercase())
     }
 
+    /// Whether `other` would connect to the same place as `self`. A saved
+    /// secret belongs to its destination: if this is false and no new secret
+    /// is given, the old one must be forgotten, never sent to the new place.
+    /// Name, folder, notes and forwards are not part of the destination.
+    pub fn same_destination(&self, other: &Host) -> bool {
+        self.hostname == other.hostname
+            && self.port == other.port
+            && self.username == other.username
+            && self.connection_type == other.connection_type
+            && self.jump_host_id == other.jump_host_id
+    }
+
     pub fn secret_account_for(&self) -> String {
         Self::secret_account(self.id)
     }

@@ -95,6 +95,9 @@ impl SecretVault {
         if file.format != VAULT_FORMAT || file.version > VAULT_VERSION {
             return Err(VaultError::Malformed);
         }
+        if file.kdf_iterations == 0 || file.kdf_iterations > crypto::MAX_ITERATIONS {
+            return Err(VaultError::Malformed);
+        }
         let salt = crypto::b64_decode(&file.kdf_salt)?;
         let key = crypto::derive_key(passphrase, &salt, file.kdf_iterations);
         let plaintext = crypto::open(&file.sealed, &key)?;
@@ -121,14 +124,30 @@ impl SecretVault {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| VaultError::Io(e.to_string()))?;
         }
-        // Write-then-rename so a crash mid-write can't truncate the vault.
+        // Write-then-rename so a crash mid-write can't truncate the vault;
+        // owner-only from the moment the file exists, and flushed to disk
+        // before the rename so a power cut cannot leave an empty vault.
         let tmp = path.with_extension("tmp");
-        std::fs::write(&tmp, &json).map_err(|e| VaultError::Io(e.to_string()))?;
-        restrict_to_owner(&tmp)?;
+        write_synced_private(&tmp, &json).map_err(|e| VaultError::Io(e.to_string()))?;
         std::fs::rename(&tmp, path).map_err(|e| VaultError::Io(e.to_string()))?;
         restrict_to_owner(path)?;
         Ok(())
     }
+}
+
+fn write_synced_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let _ = std::fs::remove_file(path);
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut f = options.open(path)?;
+    f.write_all(bytes)?;
+    f.sync_all()
 }
 
 /// Restricts the file to its owner (mode 0600). Encrypted or not, this is the

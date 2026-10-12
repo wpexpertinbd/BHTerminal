@@ -45,11 +45,6 @@ fn load_workspace() -> Result<Workspace, String> {
     Ok(Workspace { store, multiplexing: ssh::multiplexing_supported() })
 }
 
-#[tauri::command]
-fn save_workspace(store: SessionStore) -> Result<(), String> {
-    let path = paths::sessions_file().map_err(|e| e.to_string())?;
-    store.save(&path).map_err(|e| e.to_string())
-}
 
 /// Starts `ssh` for a saved host in a fresh pty and streams it back.
 #[tauri::command]
@@ -244,6 +239,12 @@ fn save_host(
     }
 
     let mut store = load_store()?;
+    // A saved secret belongs to the server it was saved for. If the address,
+    // port, user or jump host changes and no new secret is typed, the old one
+    // is forgotten rather than carried over — otherwise editing a host to
+    // point at a server someone else controls, then connecting, would type
+    // the real password into THEIR server, master password or not.
+    let retargeted = store.host(host.id).is_some_and(|old| !old.same_destination(&host));
     let saved = if store.host(host.id).is_some() {
         store.update_host(host.clone());
         host
@@ -268,6 +269,7 @@ fn save_host(
         match secret.as_deref() {
             Some(value) if !value.is_empty() => vault.set(&account, value)?,
             Some(_) => vault.remove(&[account])?,
+            None if retargeted => vault.remove(&[account])?,
             None => {} // not supplied: leave whatever is stored untouched
         }
     } else {
@@ -642,7 +644,6 @@ pub fn run() {
         .manage(tunnels.clone())
         .invoke_handler(tauri::generate_handler![
             load_workspace,
-            save_workspace,
             open_terminal,
             open_local_shell,
             write_terminal,
@@ -668,6 +669,13 @@ pub fn run() {
             save_folder,
             delete_folder,
             transfer::backup_export,
+            vault::vault_status,
+            vault::vault_unlock,
+            vault::vault_set_master,
+            vault::vault_remove_master,
+            vault::vault_set_remember,
+            vault::vault_skip_setup,
+            vault::vault_reset_forgotten,
             transfer::backup_is_encrypted,
             transfer::backup_restore,
             transfer::import_preview,

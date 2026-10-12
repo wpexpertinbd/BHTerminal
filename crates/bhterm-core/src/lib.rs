@@ -9,6 +9,7 @@
 pub mod backup;
 pub mod crypto;
 pub mod import;
+pub mod lock;
 pub mod model;
 pub mod prompt;
 pub mod secrets;

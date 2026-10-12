@@ -112,6 +112,15 @@ export interface Available {
   pageUrl: string;
 }
 
+export interface VaultStatus {
+  locked: boolean;
+  hasMaster: boolean;
+  /** A master password is set AND this computer keeps the key. */
+  remembered: boolean;
+  /** The one-time "set a master password?" question is still to be asked. */
+  askSetup: boolean;
+}
+
 export type PtyEvent =
   | { type: "output"; data: string }
   | { type: "exit"; code: number | null };
@@ -150,7 +159,6 @@ export interface Listing {
 
 export const api = {
   loadWorkspace: () => invoke<Workspace>("load_workspace"),
-  saveWorkspace: (store: SessionStore) => invoke<void>("save_workspace", { store }),
 
   openTerminal: (hostId: string, cols: number, rows: number, onEvent: Channel<PtyEvent>) =>
     invoke<string>("open_terminal", { hostId, cols, rows, onEvent }),
@@ -202,8 +210,26 @@ export const api = {
   deleteFolder: (folderId: string) => invoke<void>("delete_folder", { folderId }),
 
   /** Returns how many secrets went into the archive. */
-  backupExport: (path: string, includeSecrets: boolean, passphrase: string | null) =>
-    invoke<number>("backup_export", { path, includeSecrets, passphrase }),
+  /** With a master password set, exporting secrets needs `masterPassword`. */
+  backupExport: (
+    path: string,
+    includeSecrets: boolean,
+    passphrase: string | null,
+    masterPassword: string | null
+  ) => invoke<number>("backup_export", { path, includeSecrets, passphrase, masterPassword }),
+
+  vaultStatus: () => invoke<VaultStatus>("vault_status"),
+  vaultUnlock: (password: string, remember: boolean) =>
+    invoke<void>("vault_unlock", { password, remember }),
+  /** `current` is required when a master password is already set. */
+  vaultSetMaster: (current: string | null, password: string, remember: boolean) =>
+    invoke<void>("vault_set_master", { current, password, remember }),
+  vaultRemoveMaster: (current: string) => invoke<void>("vault_remove_master", { current }),
+  vaultSetRemember: (current: string, remember: boolean) =>
+    invoke<void>("vault_set_remember", { current, remember }),
+  vaultSkipSetup: () => invoke<void>("vault_skip_setup"),
+  /** Only while locked. Returns the folder the locked vault was moved to. */
+  vaultResetForgotten: () => invoke<string>("vault_reset_forgotten"),
   backupIsEncrypted: (path: string) => invoke<boolean>("backup_is_encrypted", { path }),
   backupRestore: (path: string, passphrase: string | null) =>
     invoke<RestoreReport>("backup_restore", { path, passphrase }),

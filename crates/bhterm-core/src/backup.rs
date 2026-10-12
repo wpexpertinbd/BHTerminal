@@ -123,13 +123,13 @@ pub fn encode(
     if encrypt {
         let passphrase = passphrase.filter(|p| !p.is_empty()).ok_or(BackupError::NeedsPassphrase)?;
         let salt = crypto::random_salt();
-        let key = crypto::derive_key(passphrase, &salt, crypto::KDF_ITERATIONS);
+        let key = crypto::derive_key(passphrase, &salt, crypto::BACKUP_ITERATIONS);
         let plaintext = serde_json::to_vec(&payload).map_err(|_| CryptoError::EncryptionFailed)?;
         envelope.sealed = Some(crypto::seal(&plaintext, &key)?);
         envelope.kdf = Some(Kdf {
             algorithm: crypto::KDF_ALGORITHM.into(),
             salt: crypto::b64_encode(&salt),
-            iterations: crypto::KDF_ITERATIONS,
+            iterations: crypto::BACKUP_ITERATIONS,
         });
     } else {
         envelope.data = Some(payload);
@@ -163,6 +163,9 @@ pub fn decode(bytes: &[u8], passphrase: Option<&str>) -> Result<Payload, BackupE
     let (Some(kdf), Some(sealed)) = (envelope.kdf, envelope.sealed) else {
         return Err(BackupError::NotABackup);
     };
+    if kdf.iterations == 0 || kdf.iterations > crypto::MAX_ITERATIONS {
+        return Err(BackupError::NotABackup);
+    }
     let salt = crypto::b64_decode(&kdf.salt)?;
     let key = crypto::derive_key(passphrase, &salt, kdf.iterations);
     let plaintext = crypto::open(&sealed, &key)?;
