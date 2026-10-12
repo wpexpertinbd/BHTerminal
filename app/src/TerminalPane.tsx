@@ -8,13 +8,19 @@ interface Props {
   /** Stable key for this pane; the session is created once per pane. */
   paneKey: string;
   hostId: string | null; // null = local shell
-  active: boolean;
+  /** Its tab is the one in front. A hidden terminal cannot be measured, so
+   *  this is what re-fits it. */
+  visible: boolean;
+  /** It is the pane within that tab that has focus. With a split tab several
+   *  panes are visible and only one is focused — which is why these are two
+   *  props and not one. */
+  focused: boolean;
   onReady: (paneId: string) => void;
   onExit: (paneKey: string, code: number | null) => void;
   onTitle: (paneKey: string, title: string) => void;
 }
 
-export function TerminalPane({ paneKey, hostId, active, onReady, onExit, onTitle }: Props) {
+export function TerminalPane({ paneKey, hostId, visible, focused, onReady, onExit, onTitle }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -64,15 +70,24 @@ export function TerminalPane({ paneKey, hostId, active, onReady, onExit, onTitle
       })
       .catch((e) => term.write(`\r\n\x1b[31m${String(e)}\x1b[0m\r\n`));
 
-    const onResize = () => {
-      if (!active) return;
-      try { fit.fit(); } catch { return; }
-      if (paneIdRef.current) api.resize(paneIdRef.current, term.cols, term.rows);
-    };
-    window.addEventListener("resize", onResize);
+    // A ResizeObserver rather than a window listener: splitting a tab resizes
+    // its siblings with no window resize at all, and a terminal whose columns
+    // are wrong wraps every line in the wrong place.
+    let queued = false;
+    const observer = new ResizeObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        if (!hostRef.current?.offsetParent) return; // hidden: cannot measure
+        try { fit.fit(); } catch { return; }
+        if (paneIdRef.current) api.resize(paneIdRef.current, term.cols, term.rows);
+      });
+    });
+    observer.observe(hostRef.current!);
 
     return () => {
-      window.removeEventListener("resize", onResize);
+      observer.disconnect();
       term.dispose();
       // The ssh process is NOT killed here — closing the tab does that
       // explicitly. Unmounting happens for reasons the user didn't ask for.
@@ -83,16 +98,23 @@ export function TerminalPane({ paneKey, hostId, active, onReady, onExit, onTitle
   // Becoming visible: xterm can't measure a hidden element, so re-fit and
   // tell the remote the new size.
   useEffect(() => {
-    if (!active) return;
+    if (!visible) return;
     const term = termRef.current;
     const fit = fitRef.current;
     if (!term || !fit) return;
     requestAnimationFrame(() => {
       try { fit.fit(); } catch { return; }
       if (paneIdRef.current) api.resize(paneIdRef.current, term.cols, term.rows);
-      term.focus();
+      if (focused) term.focus();
     });
-  }, [active]);
+  }, [visible, focused]);
 
-  return <div className="term-host" style={{ display: active ? "block" : "none" }} ref={hostRef} />;
+  return (
+    <div
+      className="term-host"
+      style={{ display: visible ? "block" : "none" }}
+      ref={hostRef}
+      onMouseDown={() => termRef.current?.focus()}
+    />
+  );
 }

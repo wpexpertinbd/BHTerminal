@@ -200,6 +200,13 @@ export const api = {
   importPreview: (path: string) => invoke<ImportPreview>("import_preview", { path }),
   importApply: (path: string) => invoke<ImportResult>("import_apply", { path }),
 
+  startLogging: (paneId: string, path: string) =>
+    invoke<void>("start_logging", { paneId, path }),
+  stopLogging: (paneId: string) => invoke<void>("stop_logging", { paneId }),
+  loggingPath: (paneId: string) => invoke<string | null>("logging_path", { paneId }),
+  suggestedLogName: (hostId: string | null) =>
+    invoke<string>("suggested_log_name", { hostId }),
+
   saveSnippet: (snippet: Snippet) => invoke<Snippet>("save_snippet", { snippet }),
   deleteSnippet: (snippetId: string) => invoke<void>("delete_snippet", { snippetId }),
 

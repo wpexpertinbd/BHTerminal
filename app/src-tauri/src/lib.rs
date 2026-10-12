@@ -276,6 +276,46 @@ fn delete_folder(
 }
 
 
+// ── session logging ────────────────────────────────────────────────────────
+
+/// Starts a transcript for one pane. The path comes from the caller (the user
+/// picked it in a save sheet), so the only default here is the suggested
+/// FILENAME, built from the host and the date.
+#[tauri::command]
+fn start_logging(
+    registry: tauri::State<'_, SharedRegistry>,
+    pane_id: String,
+    path: String,
+) -> Result<(), String> {
+    registry.start_logging(&pane_id, std::path::Path::new(&path))
+}
+
+#[tauri::command]
+fn stop_logging(registry: tauri::State<'_, SharedRegistry>, pane_id: String) {
+    registry.stop_logging(&pane_id);
+}
+
+#[tauri::command]
+fn logging_path(registry: tauri::State<'_, SharedRegistry>, pane_id: String) -> Option<String> {
+    registry.log_path(&pane_id)
+}
+
+/// A filename nobody has to invent: the host, the date and the time, in a
+/// shape that sorts. Only the name — where it goes is the user's choice.
+#[tauri::command]
+fn suggested_log_name(host_id: Option<String>) -> String {
+    let stamp = transfer::now_stamp();
+    let name = host_id
+        .and_then(|id| id.parse::<Uuid>().ok())
+        .and_then(|id| load_store().ok().and_then(|s| s.host(id).map(|h| h.name.clone())))
+        .unwrap_or_else(|| "local".into());
+    let safe: String = name
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect();
+    format!("{safe}-{stamp}.log")
+}
+
 // ── snippets ───────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -553,6 +593,10 @@ pub fn run() {
             tunnel_start,
             tunnel_stop,
             tunnel_status,
+            start_logging,
+            stop_logging,
+            logging_path,
+            suggested_log_name,
         ])
         .on_window_event(move |window, event| {
             // Every pane is a child ssh process; leaving them behind would

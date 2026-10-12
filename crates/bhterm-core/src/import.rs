@@ -387,7 +387,7 @@ pub fn parse_ssh_config(contents: &str) -> (Vec<ParsedSession>, Vec<String>) {
 
 /// ssh_config accepts whitespace OR `=` between keyword and value.
 fn split_config_line(line: &str) -> Option<(&str, &str)> {
-    let sep = line.find(|c: char| c == ' ' || c == '\t' || c == '=')?;
+    let sep = line.find([' ', '\t', '='])?;
     let keyword = &line[..sep];
     let value = line[sep + 1..].trim_matches(|c: char| c == ' ' || c == '\t' || c == '=');
     (!keyword.is_empty() && !value.is_empty()).then_some((keyword, value))

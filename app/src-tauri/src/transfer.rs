@@ -37,6 +37,15 @@ fn rfc3339_from_unix(secs: i64) -> String {
     )
 }
 
+/// `YYYY-MM-DD-HH-MM-SS`, for a filename that sorts by when it was made.
+pub fn now_stamp() -> String {
+    stamp_from_unix(SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0) as i64)
+}
+
+fn stamp_from_unix(secs: i64) -> String {
+    rfc3339_from_unix(secs).replace(['T', ':'], "-").replace('Z', "")
+}
+
 fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
     std::fs::write(path, bytes).map_err(|e| format!("could not write {}: {e}", path.display()))?;
     // A backup holding secrets must not be world-readable even for the moment
@@ -242,6 +251,15 @@ mod tests {
         // 2100 is NOT a leap year, so Feb 28 is followed by Mar 1.
         assert_eq!(rfc3339_from_unix(4_107_456_000), "2100-02-28T00:00:00Z");
         assert_eq!(rfc3339_from_unix(4_107_542_400), "2100-03-01T00:00:00Z");
+    }
+
+    #[test]
+    fn a_log_filename_sorts_by_time_and_has_no_colons() {
+        // A colon is a path separator on some systems and a nuisance on the
+        // rest, so it must not reach a filename.
+        let stamp = stamp_from_unix(1_760_000_000);
+        assert_eq!(stamp, "2025-10-09-08-53-20");
+        assert!(!stamp.contains(':') && !stamp.contains('T') && !stamp.contains('Z'));
     }
 
     #[test]

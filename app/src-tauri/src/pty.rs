@@ -13,6 +13,7 @@ use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -41,10 +42,20 @@ impl AuthSecrets {
     }
 }
 
+/// The log file a session is writing to, shared with its reader thread so
+/// logging can be switched on and off while the session runs.
+type LogSink = Arc<Mutex<Option<LogFile>>>;
+
+struct LogFile {
+    file: std::fs::File,
+    path: PathBuf,
+}
+
 struct Session {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
+    log: LogSink,
 }
 
 #[derive(Default)]
@@ -105,9 +116,11 @@ impl PtyRegistry {
         // Taken before `master` moves into the session below.
         let fill_writer = if auth.is_empty() { None } else { pair.master.take_writer().ok() };
 
+        let log: LogSink = Arc::new(Mutex::new(None));
+        let log_for_reader = Arc::clone(&log);
         self.sessions.lock().unwrap().insert(
             id.clone(),
-            Session { master: pair.master, writer, child },
+            Session { master: pair.master, writer, child, log },
         );
 
         // One blocking reader per pane. A pty read has no async story worth
@@ -121,6 +134,14 @@ impl PtyRegistry {
                     Ok(0) => break,
                     Ok(n) => {
                         filler.observe(&buf[..n]);
+                        // Only what the server SENT is logged, never what was
+                        // typed or filled in — a transcript must not end up
+                        // holding the password that opened the session.
+                        if let Some(sink) = log_for_reader.lock().unwrap().as_mut() {
+                            // A log that cannot be written is dropped rather
+                            // than allowed to stall the terminal.
+                            let _ = sink.file.write_all(&buf[..n]);
+                        }
                         if !on_event(PtyEvent::Output { data: B64.encode(&buf[..n]) }) {
                             break; // the receiver went away
                         }
@@ -164,6 +185,46 @@ impl PtyRegistry {
         for id in ids {
             self.close(&id);
         }
+    }
+
+    /// Starts appending this session's output to `path`. Appends rather than
+    /// truncates: reconnecting to a host should extend its transcript, not
+    /// erase what was already captured.
+    pub fn start_logging(&self, id: &str, path: &Path) -> Result<(), String> {
+        let sessions = self.sessions.lock().unwrap();
+        let session = sessions.get(id).ok_or("no such terminal")?;
+
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        let mut options = std::fs::OpenOptions::new();
+        options.create(true).append(true);
+        // A transcript holds whatever the session printed, so it is created
+        // owner-only — not merely moved there afterwards, which would leave a
+        // window where another local account could open it.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let file = options.open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+
+        *session.log.lock().unwrap() = Some(LogFile { file, path: path.to_path_buf() });
+        Ok(())
+    }
+
+    pub fn stop_logging(&self, id: &str) {
+        if let Some(session) = self.sessions.lock().unwrap().get(id) {
+            // Dropping the handle flushes and closes it.
+            *session.log.lock().unwrap() = None;
+        }
+    }
+
+    /// Where this session is logging, if it is.
+    pub fn log_path(&self, id: &str) -> Option<String> {
+        let sessions = self.sessions.lock().unwrap();
+        let log = sessions.get(id)?.log.lock().unwrap();
+        log.as_ref().map(|l| l.path.display().to_string())
     }
 
     pub fn is_running(&self, id: &str) -> bool {
@@ -316,5 +377,76 @@ mod tests {
         // id must not silently accept input.
         assert!(registry.write("t2", b"x").is_err());
         assert!(registry.resize("t2", 100, 30).is_err());
+    }
+}
+
+#[cfg(test)]
+mod log_tests {
+    use super::*;
+
+    /// The transcript must hold what the session PRINTED and nothing that was
+    /// typed into it — a log holding the password that opened the session
+    /// would be worse than no log at all.
+    #[test]
+    fn a_transcript_captures_output_but_never_input() {
+        let dir = std::env::temp_dir().join(format!("bhterm-log-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("session.log");
+
+        let registry = PtyRegistry::default();
+        let (tx, rx) = std::sync::mpsc::channel();
+        registry
+            .spawn(
+                "log1".into(),
+                "/bin/sh",
+                &["-c".into(), "cat".into()],
+                80,
+                24,
+                AuthSecrets::default(),
+                move |e| tx.send(e).is_ok(),
+            )
+            .expect("spawn");
+
+        registry.start_logging("log1", &path).expect("start logging");
+        assert_eq!(registry.log_path("log1").as_deref(), Some(path.display().to_string().as_str()));
+
+        // `cat` echoes, so this arrives back as OUTPUT — which is what proves
+        // the log is capturing the stream rather than the keystrokes.
+        registry.write("log1", b"hello-from-the-shell\n").unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut seen = String::new();
+        while Instant::now() < deadline && !seen.contains("hello-from-the-shell") {
+            if let Ok(PtyEvent::Output { data }) = rx.recv_timeout(Duration::from_millis(250)) {
+                seen.push_str(&String::from_utf8_lossy(&B64.decode(data).unwrap()));
+            }
+        }
+        registry.stop_logging("log1");
+        registry.close("log1");
+
+        let logged = std::fs::read_to_string(&path).expect("the log file exists");
+        assert!(logged.contains("hello-from-the-shell"), "output was not logged: {logged:?}");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "a transcript must not be readable by other accounts");
+        }
+
+        // Stopping means stopping: nothing more is appended.
+        let size_after_stop = std::fs::metadata(&path).unwrap().len();
+        assert!(registry.log_path("log1").is_none());
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), size_after_stop);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn logging_an_unknown_pane_is_an_error_not_a_silent_no_op() {
+        let registry = PtyRegistry::default();
+        let path = std::env::temp_dir().join("bhterm-nope.log");
+        assert!(registry.start_logging("missing", &path).is_err());
+        assert!(!path.exists(), "no file is created for a pane that does not exist");
     }
 }
