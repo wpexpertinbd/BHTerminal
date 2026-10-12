@@ -90,22 +90,30 @@ pub async fn sftp_compress(
         format!("archive-{}", crate::transfer::now_stamp())
     };
 
-    let (archive, tool) = match format.as_str() {
-        // -q so a thousand file names do not come back as "output"; -o on
-        // nothing here, an existing archive is refused rather than replaced.
-        "zip" => (format!("{stem}.zip"), "zip -r -q"),
-        "tar.gz" => (format!("{stem}.tar.gz"), "tar -czf"),
+    // ⚠️ `zip` is NOT installed on a stock Ubuntu or Debian server, while
+    // `tar` always is. Saying so plainly beats "exit status 127" — this was
+    // the whole of "zip does nothing" on a real server.
+    let (archive, tool, requires) = match format.as_str() {
+        // -q so a thousand file names do not come back as "output".
+        "zip" => (format!("{stem}.zip"), "zip -r -q", Some("zip")),
+        "tar.gz" => (format!("{stem}.tar.gz"), "tar -czf", None),
         other => return Err(format!("unknown archive format “{other}”")),
     };
+
+    let precheck = requires.map_or(String::new(), |tool| {
+        format!(
+            "command -v {tool} >/dev/null 2>&1 || {{ echo '{tool} is not installed on this server              — install it (apt install {tool}) or use .tar.gz instead' >&2; exit 127; }}; "
+        )
+    });
 
     let quoted: Vec<String> = names.iter().map(|n| shell_quote(n)).collect();
     // `set -e` so a failure to create the archive is not followed by a
     // cheerful exit code from the last command in the chain.
     let command = format!(
-        "set -e; cd {}; test ! -e {} || {{ echo \"{} already exists\" >&2; exit 1; }}; {} {} {}",
+        "set -e; cd {}; {}test ! -e {} || {{ echo 'that archive already exists' >&2; exit 1; }}; {} {} {}",
         shell_quote(&dir),
+        precheck,
         shell_quote(&archive),
-        archive.replace('"', "'"),
         tool,
         shell_quote(&archive),
         quoted.join(" "),
@@ -141,8 +149,9 @@ pub async fn sftp_extract(host_id: String, dir: String, name: String) -> Result<
         return Err(format!("“{name}” is not an archive BHTerminal can extract"));
     };
 
+    let needed = tool.split_whitespace().next().unwrap_or("tar");
     let command = format!(
-        "set -e; cd {}; {} {}",
+        "set -e; cd {}; command -v {needed} >/dev/null 2>&1 || {{ echo '{needed} is not installed          on this server (apt install {needed})' >&2; exit 127; }}; {} {}",
         shell_quote(&dir),
         tool,
         shell_quote(&name)

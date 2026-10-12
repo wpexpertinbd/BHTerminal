@@ -39,7 +39,10 @@ reference the Rust version was ported from, and is no longer the shipping build.
   tab, snippets, and **session recording** to a file.
 - **SFTP browser** in the same tab, on the same login — with a path that
   **follows your terminal's directory**, taken from the window title rather than
-  injected into your shell.
+  injected into your shell. Right-click for the rest: **edit a file in the window
+  or in your own editor** (saving there uploads it back), download, new file, new
+  folder, rename, delete, and **compress or extract on the server** so a large
+  folder is never pulled down and pushed back.
 - **VNC** remote desktops in the same tabbed window.
 - **Port forwards** — local, remote and SOCKS, started per host with their live state.
 - **Saved passwords and key passphrases**, encrypted on your computer and typed in

@@ -158,6 +158,23 @@ impl SftpRegistry {
         c.mkdir(path).map_err(stringify)
     }
 
+    /// Creates an empty file.
+    ///
+    /// ⚠️ An existing path is REFUSED rather than truncated: the SFTP open
+    /// this is built on would happily empty a file that is already there,
+    /// and "New file…" must never be a way to wipe one.
+    pub fn create_file(&self, host_key: &str, path: &str) -> Result<(), String> {
+        let s = self.session(host_key)?;
+        let mut c = s.client.lock().unwrap();
+        match c.lstat(path) {
+            Ok(_) => return Err("something with that name is already here".into()),
+            Err(e) if e.is_no_such_file() => {}
+            Err(e) => return Err(stringify(e)),
+        }
+        c.upload(path, &mut Cursor::new(Vec::new())).map_err(stringify)?;
+        Ok(())
+    }
+
     pub fn rename(&self, host_key: &str, from: &str, to: &str) -> Result<(), String> {
         let s = self.session(host_key)?;
         let mut c = s.client.lock().unwrap();

@@ -502,6 +502,21 @@ async fn sftp_upload(
 }
 
 /// SFTP rides the terminal's connection, so a host with no terminal tab left
+#[tauri::command]
+async fn sftp_create_file(
+    sftp: tauri::State<'_, SharedSftp>,
+    host_id: String,
+    path: String,
+    name: String,
+) -> Result<(), String> {
+    let sftp = sftp.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        sftp.create_file(&host_id, &sftp_session::join(&path, &name))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Uploads to an EXACT remote path. `sftp_upload` puts a file into a folder;
 /// saving an edit has to land back on the file it came from, name and all.
 #[tauri::command]
@@ -588,6 +603,7 @@ pub fn run() {
             sftp_connect,
             sftp_list,
             sftp_mkdir,
+            sftp_create_file,
             sftp_rename,
             sftp_delete,
             sftp_download,

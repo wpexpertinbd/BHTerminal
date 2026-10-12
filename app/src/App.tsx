@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { save as saveFile } from "@tauri-apps/plugin-dialog";
 import { api, blankHost, newId, type Host, type HostFolder, type Workspace } from "./api";
+import { AskModal } from "./AskModal";
 import { HostEditor } from "./HostEditor";
 import { TransferSheet } from "./TransferSheet";
 import { useUpdateCheck } from "./useUpdateCheck";
@@ -80,6 +81,12 @@ export default function App() {
   const [editing, setEditing] = useState<{ host: Host; isNew: boolean } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [transfer, setTransfer] = useState<"export" | "restore" | "import" | null>(null);
+  /** See AskModal: window.prompt does not exist in this webview. */
+  const [ask, setAsk] = useState<
+    | null
+    | { title: string; value?: string; detail?: string; confirmLabel?: string; danger?: boolean;
+        onSubmit: (value: string) => void }
+  >(null);
   const [version, setVersion] = useState<string>("");
   const [theme, setTheme] = useState<ThemeChoice>(loadTheme);
   /** What that choice means right now. "Auto" has to be re-asked whenever the
@@ -218,52 +225,73 @@ export default function App() {
     setEditing({ host: blankHost(folderID), isNew: true });
   }
 
-  async function newFolder() {
+  function newFolder() {
     setMenuOpen(false);
-    const name = window.prompt("Folder name");
-    if (!name?.trim()) return;
-    try {
-      const saved = await api.saveFolder({
-        id: newId(),
-        name: name.trim(),
-        parentFolderID: null,
-        sortOrder: 0,
-      });
-      setWorkspace((w) =>
-        w ? { ...w, store: { ...w.store, folders: [...w.store.folders, saved] } } : w
-      );
-    } catch (e) {
-      setError(String(e));
-    }
+    setAsk({
+      title: "New folder",
+      value: "",
+      confirmLabel: "Create",
+      onSubmit: async (name) => {
+        setAsk(null);
+        try {
+          const saved = await api.saveFolder({
+            id: newId(),
+            name,
+            parentFolderID: null,
+            sortOrder: 0,
+          });
+          setWorkspace((w) =>
+            w ? { ...w, store: { ...w.store, folders: [...w.store.folders, saved] } } : w
+          );
+        } catch (e) {
+          setError(String(e));
+        }
+      },
+    });
   }
 
-  async function removeHost(h: Host) {
-    if (!window.confirm(`Delete “${h.name}”? Its saved password is deleted too.`)) return;
-    try {
-      await api.deleteHost(h.id);
-      setWorkspace((w) =>
-        w ? { ...w, store: { ...w.store, hosts: w.store.hosts.filter((x) => x.id !== h.id) } } : w
-      );
-      if (selected === h.id) setSelected(null);
-    } catch (e) {
-      setError(String(e));
-    }
+  function removeHost(h: Host) {
+    setAsk({
+      title: `Delete “${h.name}”?`,
+      detail: "Its saved password and key passphrase are deleted with it.",
+      confirmLabel: "Delete",
+      danger: true,
+      onSubmit: async () => {
+        setAsk(null);
+        try {
+          await api.deleteHost(h.id);
+          setWorkspace((w) =>
+            w ? { ...w, store: { ...w.store, hosts: w.store.hosts.filter((x) => x.id !== h.id) } } : w
+          );
+          if (selected === h.id) setSelected(null);
+        } catch (e) {
+          setError(String(e));
+        }
+      },
+    });
   }
 
-  async function removeFolder(f: HostFolder) {
+  function removeFolder(f: HostFolder) {
     const inside = (hostsByFolder.get(f.id) ?? []).length;
-    const warning = inside
-      ? `Delete “${f.name}” and the ${inside} host${inside === 1 ? "" : "s"} inside it?`
-      : `Delete “${f.name}”?`;
-    if (!window.confirm(warning)) return;
-    try {
-      await api.deleteFolder(f.id);
-      // The delete cascades into subfolders on the Rust side, so reload rather
-      // than trying to reproduce that walk here.
-      setWorkspace(await api.loadWorkspace());
-    } catch (e) {
-      setError(String(e));
-    }
+    setAsk({
+      title: `Delete “${f.name}”?`,
+      detail: inside
+        ? `The ${inside} host${inside === 1 ? "" : "s"} inside it go too, with their saved passwords.`
+        : "The folder is empty.",
+      confirmLabel: "Delete",
+      danger: true,
+      onSubmit: async () => {
+        setAsk(null);
+        try {
+          await api.deleteFolder(f.id);
+          // The delete cascades into subfolders on the Rust side, so reload
+          // rather than reproducing that walk here.
+          setWorkspace(await api.loadWorkspace());
+        } catch (e) {
+          setError(String(e));
+        }
+      },
+    });
   }
 
   const paneIds = useMemo(() => new Map<string, string>(), []);
@@ -729,6 +757,18 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {ask && (
+        <AskModal
+          title={ask.title}
+          value={ask.value}
+          detail={ask.detail}
+          confirmLabel={ask.confirmLabel}
+          danger={ask.danger}
+          onCancel={() => setAsk(null)}
+          onSubmit={ask.onSubmit}
+        />
+      )}
 
       {editing && workspace && (
         <HostEditor

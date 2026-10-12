@@ -4,6 +4,7 @@ import {
   api, formatSize, remoteJoin, remoteParent,
   type Listing, type SftpEntry,
 } from "./api";
+import { AskModal } from "./AskModal";
 import { ContextMenu, type MenuAction } from "./ContextMenu";
 import { FileEditor } from "./FileEditor";
 import { FileIcon, FolderIcon, LinkIcon } from "./FileIcons";
@@ -29,6 +30,19 @@ export function FilePane({ hostId, terminalCwd, follow, onFollowChange }: Props)
   /** Files handed to another application, watched so a save over there comes
    *  back here. Keyed by the local scratch path. */
   const watched = useRef(new Map<string, { remote: string; mtime: number }>());
+  /** The question on screen, if any — see AskModal for why these are not
+   *  window.prompt/confirm. */
+  const [ask, setAsk] = useState<
+    | null
+    | {
+        title: string;
+        value?: string;
+        detail?: string;
+        confirmLabel?: string;
+        danger?: boolean;
+        onSubmit: (value: string) => void;
+      }
+  >(null);
 
   const load = useCallback(
     async (path: string) => {
@@ -92,33 +106,80 @@ export function FilePane({ hostId, terminalCwd, follow, onFollowChange }: Props)
     } catch (e) { setStatus(String(e)); } finally { setBusy(false); }
   }
 
-  async function makeFolder() {
+  function makeFile() {
     if (!listing) return;
-    const name = prompt("New folder name");
-    if (!name) return;
-    try {
-      await api.sftpMkdir(hostId, listing.path, name);
-      await load(listing.path);
-    } catch (e) { setStatus(String(e)); }
+    setAsk({
+      title: "New file",
+      value: "",
+      detail: "It is created empty, and opens for editing.",
+      confirmLabel: "Create",
+      onSubmit: async (name) => {
+        setAsk(null);
+        try {
+          await api.sftpCreateFile(hostId, listing.path, name);
+          await load(listing.path);
+          // Straight into the editor: an empty file is only ever a step
+          // towards having something in it.
+          setEditing({ remote: remoteJoin(listing.path, name), name });
+        } catch (e) { setStatus(String(e)); }
+      },
+    });
   }
 
-  async function rename(entry: SftpEntry) {
+  function makeFolder() {
     if (!listing) return;
-    const next = prompt("Rename to", entry.name);
-    if (!next || next === entry.name) return;
-    try {
-      await api.sftpRename(hostId, remoteJoin(listing.path, entry.name), remoteJoin(listing.path, next));
-      await load(listing.path);
-    } catch (e) { setStatus(String(e)); }
+    setAsk({
+      title: "New folder",
+      value: "",
+      confirmLabel: "Create",
+      onSubmit: async (name) => {
+        setAsk(null);
+        try {
+          await api.sftpMkdir(hostId, listing.path, name);
+          await load(listing.path);
+        } catch (e) { setStatus(String(e)); }
+      },
+    });
   }
 
-  async function remove(entry: SftpEntry) {
+  function rename(entry: SftpEntry) {
     if (!listing) return;
-    if (!confirm(`Delete “${entry.name}”? This cannot be undone.`)) return;
-    try {
-      await api.sftpDelete(hostId, remoteJoin(listing.path, entry.name), entry.isDir);
-      await load(listing.path);
-    } catch (e) { setStatus(String(e)); }
+    setAsk({
+      title: `Rename “${entry.name}”`,
+      value: entry.name,
+      confirmLabel: "Rename",
+      onSubmit: async (next) => {
+        setAsk(null);
+        if (next === entry.name) return;
+        try {
+          await api.sftpRename(
+            hostId,
+            remoteJoin(listing.path, entry.name),
+            remoteJoin(listing.path, next)
+          );
+          await load(listing.path);
+        } catch (e) { setStatus(String(e)); }
+      },
+    });
+  }
+
+  function remove(entry: SftpEntry) {
+    if (!listing) return;
+    setAsk({
+      title: `Delete “${entry.name}”?`,
+      detail: entry.isDir
+        ? "The folder and everything in it is removed from the server. This cannot be undone."
+        : "It is removed from the server. This cannot be undone.",
+      confirmLabel: "Delete",
+      danger: true,
+      onSubmit: async () => {
+        setAsk(null);
+        try {
+          await api.sftpDelete(hostId, remoteJoin(listing.path, entry.name), entry.isDir);
+          await load(listing.path);
+        } catch (e) { setStatus(String(e)); }
+      },
+    });
   }
 
   /** Opens a remote file in another application, then watches the staged
@@ -239,6 +300,7 @@ export function FilePane({ hostId, terminalCwd, follow, onFollowChange }: Props)
       x: event.clientX,
       y: event.clientY,
       items: [
+        { label: "New file…", run: makeFile },
         { label: "New folder…", run: makeFolder },
         { label: "Upload a file…", run: upload },
         { divider: true },
@@ -289,6 +351,18 @@ export function FilePane({ hostId, terminalCwd, follow, onFollowChange }: Props)
           <div className="files-status">Empty folder</div>
         )}
       </div>
+
+      {ask && (
+        <AskModal
+          title={ask.title}
+          value={ask.value}
+          detail={ask.detail}
+          confirmLabel={ask.confirmLabel}
+          danger={ask.danger}
+          onCancel={() => setAsk(null)}
+          onSubmit={ask.onSubmit}
+        />
+      )}
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
 

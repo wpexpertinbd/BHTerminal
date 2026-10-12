@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api, newId, type Snippet } from "./api";
+import { AskModal } from "./AskModal";
 
 interface Props {
   snippets: Snippet[];
@@ -13,6 +14,7 @@ export function SnippetBar({ snippets, onSend, onChanged }: Props) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Snippet | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<Snippet | null>(null);
 
   async function save(s: Snippet) {
     if (!s.name.trim() || !s.command.trim()) {
@@ -33,7 +35,6 @@ export function SnippetBar({ snippets, onSend, onChanged }: Props) {
   }
 
   async function remove(s: Snippet) {
-    if (!window.confirm(`Delete the snippet “${s.name}”?`)) return;
     await api.deleteSnippet(s.id);
     onChanged(snippets.filter((x) => x.id !== s.id));
   }
@@ -86,7 +87,7 @@ export function SnippetBar({ snippets, onSend, onChanged }: Props) {
                   title="Delete"
                   onClick={(e) => {
                     e.stopPropagation();
-                    remove(s);
+                    setConfirming(s);
                   }}
                 >
                   🗑
@@ -95,6 +96,20 @@ export function SnippetBar({ snippets, onSend, onChanged }: Props) {
             </div>
           ))}
         </div>
+      )}
+
+      {confirming && (
+        <AskModal
+          title={`Delete the snippet “${confirming.name}”?`}
+          confirmLabel="Delete"
+          danger
+          onCancel={() => setConfirming(null)}
+          onSubmit={() => {
+            const s = confirming;
+            setConfirming(null);
+            remove(s);
+          }}
+        />
       )}
 
       {editing && (

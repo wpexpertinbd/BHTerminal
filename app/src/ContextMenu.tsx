@@ -39,7 +39,14 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
       if (r.right > window.innerWidth) el.style.left = `${Math.max(4, x - r.width)}px`;
     }
     const dismiss = (e: Event) => {
-      if (e instanceof KeyboardEvent && e.key !== "Escape") return;
+      if (e instanceof KeyboardEvent) {
+        if (e.key === "Escape") onClose();
+        return;
+      }
+      // ⚠️ A press INSIDE the menu belongs to the menu. Closing on it would
+      // unmount the button before its click could fire, which makes every
+      // item a no-op — mousedown always precedes click.
+      if (e.target instanceof Node && ref.current?.contains(e.target)) return;
       onClose();
     };
     // Capture: a click anywhere else closes it before that click lands.

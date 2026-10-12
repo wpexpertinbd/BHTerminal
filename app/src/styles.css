@@ -465,3 +465,15 @@ body {
 .editor-status { margin-right: auto; font-size: 11.5px; color: var(--muted); align-self: center; }
 .dirty-dot { color: var(--accent); font-size: 12px; margin-left: 7px; vertical-align: middle; }
 /* END BHTERM-FILE-ACTIONS */
+
+/* BHTERM-ASK */
+.modal.ask { width: 380px; }
+.modal.ask input {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 13px;
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); color: var(--text);
+}
+.modal-actions .danger-btn {
+  background: var(--danger-fill); border-color: var(--danger-fill); color: #fff; font-weight: 500;
+}
+/* END BHTERM-ASK */

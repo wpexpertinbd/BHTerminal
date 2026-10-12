@@ -170,6 +170,9 @@ export const api = {
   sftpList: (hostId: string, path: string) => invoke<Listing>("sftp_list", { hostId, path }),
   sftpMkdir: (hostId: string, path: string, name: string) =>
     invoke<void>("sftp_mkdir", { hostId, path, name }),
+  /** Creates an EMPTY file; refuses a name that is already taken. */
+  sftpCreateFile: (hostId: string, path: string, name: string) =>
+    invoke<void>("sftp_create_file", { hostId, path, name }),
   sftpRename: (hostId: string, from: string, to: string) =>
     invoke<void>("sftp_rename", { hostId, from, to }),
   sftpDelete: (hostId: string, path: string, isDir: boolean) =>

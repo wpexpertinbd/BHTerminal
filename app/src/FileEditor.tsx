@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import { AskModal } from "./AskModal";
 
 interface Props {
   hostId: string;
@@ -24,6 +25,7 @@ export function FileEditor({ hostId, remote, name, onClose, onSaved }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
   const localRef = useRef<string | null>(null);
+  const [confirmClose, setConfirmClose] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,9 +74,29 @@ export function FileEditor({ hostId, remote, name, onClose, onSaved }: Props) {
   }
 
   function close() {
-    if (dirty && !window.confirm(`“${name}” has unsaved changes. Close anyway?`)) return;
+    if (dirty) {
+      setConfirmClose(true);
+      return;
+    }
+    discardAndClose();
+  }
+
+  function discardAndClose() {
     if (localRef.current) api.discardScratch(localRef.current).catch(() => {});
     onClose();
+  }
+
+  if (confirmClose) {
+    return (
+      <AskModal
+        title={`“${name}” has unsaved changes`}
+        detail="Closing now discards what you have typed since the last save."
+        confirmLabel="Discard and close"
+        danger
+        onCancel={() => setConfirmClose(false)}
+        onSubmit={discardAndClose}
+      />
+    );
   }
 
   return (
