@@ -1,0 +1,24 @@
+#!/bin/sh
+#
+# Reopens the app the preinstall just quit, as the person sitting at the Mac —
+# never as root, which would leave root-owned files in their data directory.
+#
+# Only for an install onto the running system ($3 is the target volume): a
+# package being installed onto another disk has no session to open it in.
+
+[ "$3" = "/" ] || exit 0
+
+APP=/Applications/BHTerminal.app
+
+# Refuse a symlink, and check this really is BHTerminal before launching it.
+[ -L "$APP" ] && exit 0
+[ -d "$APP" ] || exit 0
+ID=$(/usr/bin/defaults read "$APP/Contents/Info" CFBundleIdentifier 2>/dev/null)
+[ "$ID" = "com.biswashost.bhterminal" ] || exit 0
+
+USER_NAME=$(/usr/bin/stat -f "%Su" /dev/console)
+[ -n "$USER_NAME" ] && [ "$USER_NAME" != "root" ] || exit 0
+UID_NUM=$(/usr/bin/id -u "$USER_NAME" 2>/dev/null) || exit 0
+
+/bin/launchctl asuser "$UID_NUM" /usr/bin/sudo -u "$USER_NAME" /usr/bin/open "$APP" || true
+exit 0

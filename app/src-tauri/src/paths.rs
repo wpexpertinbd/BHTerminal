@@ -8,10 +8,19 @@ use std::path::PathBuf;
 /// the shipped Swift app uses, so an existing install's sessions.json is
 /// picked up as-is rather than silently starting empty.
 /// `%APPDATA%\BHTerminal` on Windows, `~/.local/share/BHTerminal` on Linux.
+///
+/// `BHTERMINAL_DATA_DIR` overrides it. That exists for one reason: taking
+/// screenshots and running tests against a throwaway set of hosts, instead of
+/// pointing a camera at somebody's real server list. It is read from the
+/// environment only — never from a config file or an argument — so nothing
+/// the app loads can move where its credentials are kept.
 pub fn data_dir() -> io::Result<PathBuf> {
-    let base = dirs::data_dir()
-        .ok_or_else(|| io::Error::other("no data directory for this user"))?;
-    let dir = base.join("BHTerminal");
+    let dir = match std::env::var_os("BHTERMINAL_DATA_DIR") {
+        Some(path) if !path.is_empty() => PathBuf::from(path),
+        _ => dirs::data_dir()
+            .ok_or_else(|| io::Error::other("no data directory for this user"))?
+            .join("BHTerminal"),
+    };
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
 }
