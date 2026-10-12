@@ -12,6 +12,8 @@
      breathing room rather than a grey frame around a white box.
      ⚠️ Keep in step with TERMINAL_THEMES in theme.ts. */
   --term-bg: #ffffff;
+  --term-scroll: #c3c3c8;
+  --term-scroll-hover: #a6a6ac;
   /* One height for the three header strips — the sessions header, the tab
      bar and the file-browser toolbar — so their bottom borders form a
      single line across the window instead of three. */
@@ -48,6 +50,8 @@
     color-scheme: dark;
     --bg: #161617;
     --term-bg: #1e1e1e;
+    --term-scroll: #4a4a50;
+    --term-scroll-hover: #5e5e66;
     --sidebar: #1f1f21;
     --topbar: #252528;
     --surface: #2a2a2d;
@@ -74,6 +78,8 @@
   color-scheme: dark;
   --bg: #161617;
   --term-bg: #1e1e1e;
+  --term-scroll: #4a4a50;
+  --term-scroll-hover: #5e5e66;
   --sidebar: #1f1f21;
   --topbar: #252528;
   --surface: #2a2a2d;
@@ -179,15 +185,23 @@ body {
 /* Inside a split, a pane slot is the positioning context; a lone pane uses
    the panes area itself. Either way the terminal fills what contains it. */
 .term-wrap { position: absolute; inset: 0; }
-/* Breathing room on all four sides. xterm's fit addon measures this
-   element's CONTENT box, so padding correctly shrinks the usable grid
-   instead of pushing the last column out of sight. */
+/* Painted the same colour as the terminal itself, so the gap around the
+   text reads as breathing room rather than a border. */
 .term-host {
-  position: absolute; inset: 0; padding: 14px 16px;
-  /* Painted the same colour as the terminal itself — otherwise the padding
-     shows the pane behind it and looks like a border. */
+  position: absolute; inset: 0;
   background: var(--term-bg);
 }
+/* The breathing room goes on xterm's OWN element: the fit addon reads the
+   parent's full height but subtracts padding only from this one. Padding on
+   .term-host was never subtracted, so the last row sank under the bottom
+   edge and the right column ran under the scrollbar. */
+.term-host .xterm {
+  box-sizing: border-box; height: 100%;
+  padding: 14px 16px;
+}
+/* xterm's own stylesheet paints the scroll viewport #000, and the viewport
+   now spans the padding too — repaint it in the terminal's colour. */
+.term-host .xterm-viewport { background-color: var(--term-bg) !important; }
 
 .placeholder {
   position: absolute; inset: 0; display: grid; place-items: center;
@@ -575,3 +589,22 @@ body.resizing * { cursor: col-resize !important; }
   white-space: pre; overflow-x: auto; line-height: 1.4;
 }
 /* END BHTERM-APPEARANCE-SHEET */
+
+/* BHTERM-TERM-SCROLLBAR */
+/* ⚠️ macOS draws OVERLAY scrollbars, which take no layout width — so xterm's
+   fit addon subtracts nothing for them and lays columns across the full
+   width, and the scrollbar then paints ON TOP of the last column (the
+   "1/10" column of a yum transaction, for instance).
+
+   Styling ::-webkit-scrollbar switches the engine to a classic scrollbar
+   that OCCUPIES space, which is both the visual fix and the thing that
+   makes `viewport.scrollBarWidth` non-zero so the fit is right. */
+.xterm-viewport::-webkit-scrollbar { width: 11px; }
+.xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--term-scroll); border-radius: 6px;
+  /* The border fakes a gutter so the thumb does not touch the text. */
+  border: 3px solid transparent; background-clip: content-box;
+}
+.xterm-viewport::-webkit-scrollbar-thumb:hover { background: var(--term-scroll-hover); background-clip: content-box; }
+/* END BHTERM-TERM-SCROLLBAR */
