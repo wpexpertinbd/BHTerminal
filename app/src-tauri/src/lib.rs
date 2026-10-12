@@ -618,6 +618,9 @@ pub fn run() {
         .run(move |app, event| match event {
             // Clicking the Dock icon with no window on screen brings the one
             // that was hidden back, rather than doing nothing.
+            // ⚠️ macOS only — the variant does not exist elsewhere, and an
+            // ungated arm fails to compile on Windows and Linux.
+            #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen { .. } => show_main_window(app),
             // The ONE place everything is torn down. Every pane is a child
             // ssh process and every forward is another; leaving them behind
