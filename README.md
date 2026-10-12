@@ -56,6 +56,32 @@ reference the Rust version was ported from, and is no longer the shipping build.
 - **Secure by design** — host-key verification, an ssh argument allow-list, and imports
   treated as untrusted input. Details in [`SECURITY.md`](SECURITY.md).
 
+## Upgrading from v1.x on macOS
+
+The old macOS app was a different application to the system — a different
+bundle identifier — so installing v2 does **not** replace it. Installing over
+the top leaves two copies of BHTerminal on the Mac. Do this instead:
+
+1. **In the old app:** `File ▸ Export Backup…`, and tick **include saved
+   passwords**. You will be asked for a passphrase; the file is encrypted with
+   it, and there is no way to open it without that passphrase.
+2. **Remove the old app.** Drag **BHTerminal** from Applications to the Trash
+   (macOS asks for your password, because the old installer wrote it as root).
+3. **Install** `BHTerminal-<version>-universal.pkg` from the
+   [latest release](https://github.com/wpexpertinbd/BHTerminal/releases/latest).
+4. **In the new app:** **＋ ▸ Restore a backup…**, choose that file, enter the
+   passphrase.
+
+Your hosts and folders are read from the same place the old app kept them, so
+they are usually there already — the backup is what carries your **saved
+passwords** across, because v1 kept them in the macOS Keychain and v2 keeps
+them in its own encrypted vault.
+
+This is also the way to move a host list to the Windows or Linux build: the
+backup file is the same format on every platform. A private key file is the one
+thing that does not travel — it stays on the machine it is on, and a restore
+tells you which hosts are pointing at a key that is not on this computer.
+
 ## First launch on macOS
 
 The app is signed, but **not notarised** — that needs a paid Apple account, and this
