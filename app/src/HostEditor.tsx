@@ -23,6 +23,9 @@ export function HostEditor({ host, isNew, folders, hosts, onSaved, onCancel }: P
   const [stored, setStored] = useState(false);
   const [clearSecret, setClearSecret] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** null = not checked yet. A key path from another computer is the usual
+   *  reason a restored host quietly falls back to asking for a password. */
+  const [keyFound, setKeyFound] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,6 +34,23 @@ export function HostEditor({ host, isNew, folders, hosts, onSaved, onCancel }: P
   }, [host.id, isNew]);
 
   const kind = authKind(draft.authMethod);
+  const keyPath =
+    kind === "privateKey" ? (draft.authMethod as { privateKey: { path: string } }).privateKey.path : "";
+
+  useEffect(() => {
+    if (kind !== "privateKey" || !keyPath.trim()) {
+      setKeyFound(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .keyPathExists(keyPath)
+      .then((found) => !cancelled && setKeyFound(found))
+      .catch(() => !cancelled && setKeyFound(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [kind, keyPath]);
   const isVnc = draft.connectionType === "vnc";
 
   function set<K extends keyof Host>(key: K, value: Host[K]) {
@@ -202,6 +222,13 @@ export function HostEditor({ host, isNew, folders, hosts, onSaved, onCancel }: P
               />
               <button onClick={browseKey}>Choose…</button>
             </div>
+            {keyFound === false && (
+              <small className="warn-line">
+                That file is not on this computer. If this host came from another machine, choose the
+                key again here — paths inside your home folder are saved as <code>~/…</code>, which
+                works on macOS, Windows and Linux alike.
+              </small>
+            )}
           </label>
         )}
 

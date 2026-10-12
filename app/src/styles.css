@@ -165,6 +165,7 @@ body {
 .panes { flex: 1; position: relative; min-height: 0; }
 /* Inside a split, a pane slot is the positioning context; a lone pane uses
    the panes area itself. Either way the terminal fills what contains it. */
+.term-wrap { position: absolute; inset: 0; }
 .term-host { position: absolute; inset: 0; padding: 6px; }
 
 .placeholder {
@@ -400,8 +401,9 @@ body {
 .pane-head button:hover { color: #fff; }
 /* The base rule positions a terminal absolutely to fill its container. In a
    split the slot also carries a header, and an absolute inset:0 would sit on
-   top of it — so inside a slot the terminal is laid out by the flexbox. */
-.pane-slot .term-host { position: relative; inset: auto; flex: 1; min-height: 0; }
+   top of it — so inside a slot the wrapper is laid out by the flexbox and the
+   terminal fills the wrapper. */
+.pane-slot .term-wrap { position: relative; inset: auto; flex: 1; min-height: 0; }
 .note.recording { color: var(--danger); }
 /* END BHTERM-SPLIT-PANES */
 
@@ -477,3 +479,20 @@ body {
   background: var(--danger-fill); border-color: var(--danger-fill); color: #fff; font-weight: 500;
 }
 /* END BHTERM-ASK */
+
+/* BHTERM-TERM-MENU */
+.term-notice {
+  position: absolute; right: 14px; bottom: 10px; z-index: 5;
+  background: rgba(0,0,0,.76); color: #fff; font-size: 11.5px;
+  padding: 4px 10px; border-radius: 6px; pointer-events: none;
+}
+/* END BHTERM-TERM-MENU */
+
+/* BHTERM-KEY-WARN */
+.warn-line {
+  color: var(--warn-text); background: var(--warn-bg);
+  border: 1px solid var(--warn-line); border-radius: 6px;
+  padding: 6px 8px; margin-top: 6px !important;
+}
+.warn-line code { background: transparent; }
+/* END BHTERM-KEY-WARN */

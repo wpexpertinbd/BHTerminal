@@ -195,6 +195,9 @@ export const api = {
   /** Only whether something is stored — the secret itself never comes back. */
   hostHasSecret: (hostId: string) => invoke<boolean>("host_has_secret", { hostId }),
   deleteHost: (hostId: string) => invoke<void>("delete_host", { hostId }),
+  /** Whether a private key is actually on THIS computer — a host list that
+   *  came from another machine often points at a path that is not. */
+  keyPathExists: (path: string) => invoke<boolean>("key_path_exists", { path }),
   saveFolder: (folder: HostFolder) => invoke<HostFolder>("save_folder", { folder }),
   deleteFolder: (folderId: string) => invoke<void>("delete_folder", { folderId }),
 

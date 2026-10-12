@@ -14,7 +14,7 @@
 use bhterm_core::{Host, TunnelRule};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::{Arc, Mutex};
 
 struct Running {
@@ -64,7 +64,7 @@ impl TunnelRegistry {
         args.insert(0, "BatchMode=yes".into());
         args.insert(0, "-o".into());
 
-        let mut child = Command::new("ssh")
+        let mut child = crate::proc::command("ssh")
             .args(&args)
             .stdin(Stdio::null())
             .stdout(Stdio::null())

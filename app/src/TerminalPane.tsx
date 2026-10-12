@@ -1,8 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { api, Channel, decodeChunk, type PtyEvent } from "./api";
 import { TERMINAL_THEMES } from "./theme";
+import { ContextMenu, type MenuAction } from "./ContextMenu";
+import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import "@xterm/xterm/css/xterm.css";
 
 interface Props {
@@ -50,6 +52,8 @@ export function TerminalPane({
   // Read at creation time; the effect below keeps it current afterwards.
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuAction[] } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Created exactly once per pane. ⚠️ Never tear this down on tab switch:
   // the session lives in Rust, and disposing the terminal here would throw
@@ -141,12 +145,112 @@ export function TerminalPane({
     });
   }, [visible, focused]);
 
+  /** Everything in the scrollback, trailing blank lines dropped — what
+   *  "copy all" has to mean in a terminal, since the visible screen is
+   *  usually the least interesting part of a long build log. */
+  function allText(): string {
+    const term = termRef.current;
+    if (!term) return "";
+    const buffer = term.buffer.active;
+    const lines: string[] = [];
+    for (let i = 0; i < buffer.length; i++) {
+      lines.push(buffer.getLine(i)?.translateToString(true) ?? "");
+    }
+    while (lines.length > 0 && lines[lines.length - 1].trim() === "") lines.pop();
+    return lines.join("\n");
+  }
+
+  async function copy(text: string, what: string) {
+    if (!text) {
+      setNotice("Nothing to copy");
+      return;
+    }
+    try {
+      // The plugin goes through the OS clipboard directly. navigator.clipboard
+      // needs a secure context and a user gesture, and a webview can refuse it
+      // with no explanation — which is not a thing to discover mid-paste.
+      await writeText(text);
+      setNotice(`${what} copied`);
+    } catch {
+      try {
+        await navigator.clipboard.writeText(text);
+        setNotice(`${what} copied`);
+      } catch {
+        setNotice("The clipboard refused the copy");
+      }
+    }
+  }
+
+  function openMenu(event: React.MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    const term = termRef.current;
+    const selection = term?.getSelection() ?? "";
+    setMenu({
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        {
+          label: "Copy",
+          disabled: !selection,
+          run: () => copy(selection, "Selection"),
+        },
+        { label: "Copy everything", run: () => copy(allText(), "Scrollback") },
+        {
+          label: "Paste",
+          run: async () => {
+            try {
+              const text = await readText();
+              // Through the same path as typing, so broadcast applies and a
+              // split tab pastes into every pane when it is on.
+              if (text) onInputRef.current(paneKey, text);
+              else setNotice("The clipboard is empty");
+            } catch {
+              setNotice("Could not read the clipboard — ⌘V / Ctrl-V still works");
+            }
+          },
+        },
+        { divider: true },
+        { label: "Select all", run: () => term?.selectAll() },
+        {
+          label: "Clear selection",
+          disabled: !selection,
+          run: () => term?.clearSelection(),
+        },
+        { divider: true },
+        {
+          label: "Clear scrollback",
+          run: () => {
+            term?.clear();
+            setNotice("Scrollback cleared");
+          },
+        },
+      ],
+    });
+  }
+
+  // A one-line confirmation that fades: a copy with no feedback leaves you
+  // wondering whether it took.
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 1800);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  // ⚠️ The element xterm is opened into holds xterm's OWN DOM, so nothing of
+  // React's goes inside it — the notice and the menu are siblings in a
+  // wrapper instead.
   return (
     <div
-      className="term-host"
+      className="term-wrap"
       style={{ display: visible ? "block" : "none" }}
-      ref={hostRef}
-      onMouseDown={() => termRef.current?.focus()}
-    />
+      onContextMenu={openMenu}
+    >
+      <div className="term-host" ref={hostRef} onMouseDown={() => termRef.current?.focus()} />
+      {notice && <div className="term-notice">{notice}</div>}
+      {menu && (
+        <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
+      )}
+    </div>
   );
 }

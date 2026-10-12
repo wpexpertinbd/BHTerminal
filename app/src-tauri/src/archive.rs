@@ -12,7 +12,6 @@
 
 use bhterm_core::ssh::{self, shell_quote};
 use bhterm_core::SessionStore;
-use std::process::Command;
 use uuid::Uuid;
 
 use crate::paths;
@@ -48,7 +47,7 @@ fn run(host_id: &str, command: &str) -> Result<String, String> {
     let cm = ssh::ControlMaster { socket_dir: &socket_dir };
     let args = ssh::build_exec(&host, jump.as_ref(), Some(&cm), command).map_err(|e| e.to_string())?;
 
-    let out = Command::new("ssh")
+    let out = crate::proc::command("ssh")
         .args(&args)
         .output()
         .map_err(|e| format!("could not run ssh: {e}"))?;

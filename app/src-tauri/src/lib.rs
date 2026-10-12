@@ -7,6 +7,7 @@ mod edit;
 // vault_file() is part of the paths contract but only the Vault opens it.
 #[allow(dead_code)]
 mod paths;
+mod proc;
 mod pty;
 mod sftp_session;
 mod transfer;
@@ -171,6 +172,45 @@ fn save_store(store: &SessionStore) -> Result<(), String> {
     store.save(&paths::sessions_file().map_err(|e| e.to_string())?).map_err(|e| e.to_string())
 }
 
+/// Rewrites a key path inside the user's own home as `~/…`.
+///
+/// ⚠️ This is what makes a host list portable. A Mac records
+/// `/Users/benjamin/.ssh/id_ed25519`; carried to Windows that path does not
+/// exist and the connection quietly falls back to asking for a password.
+/// `~/.ssh/id_ed25519` resolves on BOTH (ssh.rs expands `~` from HOME or
+/// USERPROFILE), so the same entry works on either machine. Backslashes are
+/// normalised because ssh accepts forward slashes everywhere.
+fn portable_key_path(path: &str) -> String {
+    let normalised = path.replace('\\', "/");
+    let Some(home) = dirs::home_dir() else { return normalised };
+    let home = home.to_string_lossy().replace('\\', "/");
+    let home = home.trim_end_matches('/');
+    if home.is_empty() {
+        return normalised;
+    }
+    // Windows paths are case-insensitive; comparing lowercased is right there
+    // and harmless elsewhere, since a real prefix still matches.
+    let (hay, needle) = if cfg!(windows) {
+        (normalised.to_lowercase(), home.to_lowercase())
+    } else {
+        (normalised.clone(), home.to_string())
+    };
+    match hay.strip_prefix(&needle).and_then(|rest| rest.strip_prefix('/')) {
+        Some(_) => format!("~/{}", &normalised[home.len() + 1..]),
+        None => normalised,
+    }
+}
+
+/// Whether a key file is actually on this computer, for the editor to warn
+/// about a path that came from another machine.
+#[tauri::command]
+fn key_path_exists(path: String) -> bool {
+    if path.trim().is_empty() {
+        return false;
+    }
+    std::path::Path::new(&ssh::expand_tilde(&path)).is_file()
+}
+
 /// Adds or updates a host, and stores (or clears) its secret in one step.
 ///
 /// An EMPTY secret means "remove it", not "leave it alone". Saving only
@@ -193,6 +233,14 @@ fn save_host(
         && !ssh::is_valid_username(&host.username)
     {
         return Err(format!("“{}” is not a usable username.", host.username));
+    }
+
+    // Store a key path portably before anything else sees it.
+    let mut host = host;
+    if let bhterm_core::AuthMethod::PrivateKey { path } = &host.auth_method {
+        host.auth_method = bhterm_core::AuthMethod::PrivateKey {
+            path: portable_key_path(path),
+        };
     }
 
     let mut store = load_store()?;
@@ -584,6 +632,7 @@ pub fn run() {
     );
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(registry.clone())
@@ -614,6 +663,7 @@ pub fn run() {
             vnc_prepare,
             save_host,
             host_has_secret,
+            key_path_exists,
             delete_host,
             save_folder,
             delete_folder,

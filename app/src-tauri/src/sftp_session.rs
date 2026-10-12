@@ -13,7 +13,7 @@ use bhterm_core::sftp::{self, DirEntry, SftpClient, SftpError};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::Cursor;
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -55,9 +55,23 @@ pub struct SftpSession {
     client: Mutex<SftpClient<ChildStdout, ChildStdin>>,
     child: Mutex<Child>,
     home: String,
+    /// How this session was opened, so a dead one can be rebuilt without
+    /// asking the UI to start again.
+    program: String,
+    args: Vec<String>,
 }
 
 impl SftpSession {
+    /// Whether the ssh behind this session is still running. A child that has
+    /// exited leaves every later call failing on a closed pipe — on Windows
+    /// literally "The pipe is being closed. (os error 232)".
+    fn is_alive(&self) -> bool {
+        match self.child.lock() {
+            Ok(mut child) => matches!(child.try_wait(), Ok(None)),
+            Err(_) => false,
+        }
+    }
+
     fn list(&self, path: &str) -> Result<Listing, String> {
         let mut client = self.client.lock().unwrap();
         let resolved = client.realpath(path).map_err(stringify)?;
@@ -124,8 +138,14 @@ impl SftpRegistry {
         Err(last_error)
     }
 
+    /// How long ONE attempt may spend in the SFTP handshake before the child
+    /// is killed. Without this a wedged ssh — one waiting on a prompt it has
+    /// nowhere to show, say — blocks the read forever, and since the child
+    /// now has no console window on Windows it would be an INVISIBLE orphan.
+    const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(12);
+
     fn try_open(program: &str, args: &[String]) -> Result<SftpSession, String> {
-        let mut child = Command::new(program)
+        let mut child = crate::proc::command(program)
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -136,16 +156,42 @@ impl SftpRegistry {
         let stdin = child.stdin.take().ok_or("no stdin")?;
         let stdout = child.stdout.take().ok_or("no stdout")?;
 
-        let mut client = match SftpClient::connect(stdout, stdin) {
-            Ok(c) => c,
-            Err(e) => {
+        // The handshake reads from the child, which can block indefinitely,
+        // so it runs on its own thread and the child is killed if it does.
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            // The receiver is gone on timeout; the send failing is expected.
+            let _ = tx.send(SftpClient::connect(stdout, stdin));
+        });
+
+        let mut client = match rx.recv_timeout(Self::HANDSHAKE_TIMEOUT) {
+            Ok(Ok(client)) => client,
+            Ok(Err(e)) => {
                 let _ = child.kill();
+                let _ = child.wait();
                 return Err(e.to_string());
+            }
+            Err(_) => {
+                // Killing the child also unblocks the thread's read.
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(
+                    "the SFTP channel did not answer — the server may be asking for something ssh \
+                     cannot ask here (an unknown host key, or a password with no key or agent). \
+                     Open a terminal to that host first."
+                        .into(),
+                );
             }
         };
         // Where the session landed IS the remote home.
         let home = client.realpath(".").unwrap_or_else(|_| "/".to_string());
-        Ok(SftpSession { client: Mutex::new(client), child: Mutex::new(child), home })
+        Ok(SftpSession {
+            client: Mutex::new(client),
+            child: Mutex::new(child),
+            home,
+            program: program.to_string(),
+            args: args.to_vec(),
+        })
     }
 
     pub fn list(&self, host_key: &str, path: &str) -> Result<Listing, String> {
@@ -235,8 +281,31 @@ impl SftpRegistry {
         }
     }
 
+    /// The live session for a host, reopening it if the old one died.
+    ///
+    /// An ssh can go away for reasons that are nobody's mistake — the network
+    /// drops, the server reboots, or (on Windows, before the console window
+    /// was suppressed) somebody closes the black window it was running in.
+    /// Leaving the dead session in the map made every later click fail with a
+    /// closed-pipe error until the app was restarted; rebuilding it quietly
+    /// is what the user means by "it should just work".
     fn session(&self, host_key: &str) -> Result<Arc<SftpSession>, String> {
-        self.existing(host_key).ok_or_else(|| "no SFTP session for this host".to_string())
+        let existing = self
+            .existing(host_key)
+            .ok_or_else(|| "no SFTP session for this host".to_string())?;
+        if existing.is_alive() {
+            return Ok(existing);
+        }
+
+        let (program, args) = (existing.program.clone(), existing.args.clone());
+        self.sessions.lock().unwrap().remove(host_key);
+        // One quick attempt: this is a click waiting on it, not a login.
+        let session = Arc::new(Self::try_open(&program, &args)?);
+        self.sessions
+            .lock()
+            .unwrap()
+            .insert(host_key.to_string(), session.clone());
+        Ok(session)
     }
 }
 

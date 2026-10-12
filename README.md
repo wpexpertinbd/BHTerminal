@@ -59,6 +59,8 @@ reference the Rust version was ported from, and is no longer the shipping build.
   back, and **Quit BHTerminal** from its menu when you really mean it.
 - **Update check** — finds the right installer for your machine and opens it in your
   browser. It never downloads or runs anything itself; see [`SECURITY.md`](SECURITY.md).
+- **Right-click the terminal** for copy, copy everything, paste, select all and
+  clear; right-click the file browser for everything described above.
 - **Secure by design** — host-key verification, an ssh argument allow-list, and imports
   treated as untrusted input. Details in [`SECURITY.md`](SECURITY.md).
 
