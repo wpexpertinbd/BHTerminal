@@ -99,8 +99,10 @@ body {
 .app { display: flex; height: 100%; }
 
 .sidebar {
-  width: 250px;
-  flex: 0 0 250px;
+  /* The width is a variable so the divider can move it; the fallback is
+     what the app shipped with, which is also what double-click restores. */
+  width: var(--sidebar-w, 250px);
+  flex: 0 0 var(--sidebar-w, 250px);
   background: var(--sidebar);
   border-right: 1px solid var(--line);
   display: flex;
@@ -180,7 +182,7 @@ body {
 
 /* ── SFTP file pane ─────────────────────────────────────────────────────── */
 .files {
-  position: absolute; top: 0; right: 0; bottom: 0; width: 320px;
+  position: absolute; top: 0; right: 0; bottom: 0; width: var(--files-w, 320px);
   background: var(--surface); border-left: 1px solid var(--line);
   display: flex; flex-direction: column; font-size: 12px;
 }
@@ -213,7 +215,7 @@ body {
    a local-shell tab has none and should use the whole window. The inset is
    applied to the whole split group, so splitting shares what is left rather
    than each pane subtracting the file pane's width again. */
-.panes.with-files .tab-panes { right: 320px; }
+.panes.with-files .tab-panes { right: var(--files-w, 320px); }
 
 /* ── VNC ────────────────────────────────────────────────────────────────── */
 .vnc { position: absolute; inset: 0; background: #101013; }
@@ -496,3 +498,22 @@ body {
 }
 .warn-line code { background: transparent; }
 /* END BHTERM-KEY-WARN */
+
+/* BHTERM-RESIZE */
+/* A 5px grab strip that reads as 1px: the border it sits over is the visual
+   line, and a 1px target is a cursor-hunting exercise. */
+.pane-divider {
+  flex: 0 0 5px; margin-left: -3px; margin-right: -2px; z-index: 6;
+  cursor: col-resize; background: transparent; align-self: stretch;
+}
+.pane-divider:hover, body.resizing .pane-divider { background: var(--accent); opacity: .35; }
+/* The file pane is positioned against the window edge, so its handle is too. */
+.files-divider {
+  position: absolute; top: 0; bottom: 0; right: var(--files-w, 320px);
+  width: 5px; margin: 0; flex: none;
+}
+/* While dragging, the pointer must not select text or flicker between
+   cursors as it crosses the terminal. */
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing * { cursor: col-resize !important; }
+/* END BHTERM-RESIZE */

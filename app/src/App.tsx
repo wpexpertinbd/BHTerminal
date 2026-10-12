@@ -5,6 +5,7 @@ import { AskModal } from "./AskModal";
 import { HostEditor } from "./HostEditor";
 import { TransferSheet } from "./TransferSheet";
 import { useUpdateCheck } from "./useUpdateCheck";
+import { useResizablePanes } from "./useResizablePanes";
 import { applyTheme, loadTheme, resolvedMode, watchSystemMode, type ThemeChoice } from "./theme";
 import { SnippetBar } from "./SnippetBar";
 import { TunnelBar } from "./TunnelBar";
@@ -96,6 +97,7 @@ export default function App() {
    *  than tracked here, so it stays right across tab switches. */
   const [logPath, setLogPath] = useState<string | null>(null);
   const update = useUpdateCheck(setVersion);
+  const { widths, startDrag, reset } = useResizablePanes();
 
   useEffect(() => {
     api.loadWorkspace().then(setWorkspace).catch((e) => setError(String(e)));
@@ -475,7 +477,15 @@ export default function App() {
   }, [tabs]);
 
   return (
-    <div className="app">
+    <div
+      className="app"
+      style={
+        {
+          "--sidebar-w": `${widths.sidebar}px`,
+          "--files-w": `${widths.files}px`,
+        } as React.CSSProperties
+      }
+    >
       <aside className="sidebar">
         <div className="sidebar-head">
           <strong>Sessions</strong>
@@ -603,6 +613,14 @@ export default function App() {
           </div>
         )}
       </aside>
+
+      {/* Double-click puts a pane back to the width it shipped with. */}
+      <div
+        className="pane-divider"
+        title="Drag to resize · double-click to reset"
+        onMouseDown={() => startDrag("sidebar")}
+        onDoubleClick={() => reset("sidebar")}
+      />
 
       <main className="main">
         <div className="tabs">
@@ -733,6 +751,15 @@ export default function App() {
             </div>
           ))}
         </div>
+
+        {active?.hostId && active.kind === "terminal" && !active.exited && (
+          <div
+            className="pane-divider files-divider"
+            title="Drag to resize · double-click to reset"
+            onMouseDown={() => startDrag("files")}
+            onDoubleClick={() => reset("files")}
+          />
+        )}
 
         {active?.hostId && active.kind === "terminal" && !active.exited && (
           <FilePane
