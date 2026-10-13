@@ -149,10 +149,23 @@ pub struct VaultStatus {
     pub ask_setup: bool,
 }
 
+/// When the vault file was last seen: how another BHTerminal process is
+/// noticed. Modified time AND length, because a coarse clock can give two
+/// quick saves the same time.
+type Stamp = Option<(std::time::SystemTime, u64)>;
+
 pub struct Vault {
     state: Mutex<State>,
     path: PathBuf,
     data_dir: PathBuf,
+    /// The file as this process last read or wrote it. Always touched with
+    /// `state` held, in that order.
+    stamp: Mutex<Stamp>,
+}
+
+fn stamp_of(path: &Path) -> Stamp {
+    let meta = std::fs::metadata(path).ok()?;
+    Some((meta.modified().ok()?, meta.len()))
 }
 
 impl Vault {
@@ -162,7 +175,12 @@ impl Vault {
         for f in [key_file(data_dir), next_key_file(data_dir), lock_file(data_dir), next_lock_file(data_dir)] {
             let _ = std::fs::remove_file(tmp_for(&f));
         }
-        let vault = |state| Vault { state: Mutex::new(state), path: path.clone(), data_dir: data_dir.to_path_buf() };
+        let vault = |state| Vault {
+            state: Mutex::new(state),
+            path: path.clone(),
+            data_dir: data_dir.to_path_buf(),
+            stamp: Mutex::new(stamp_of(&path)),
+        };
         let has_lock = lock_file(data_dir).exists() || next_lock_file(data_dir).exists();
 
         if let Some(key) = read_key_at(&key_file(data_dir)).map_err(|e| io_err("vault key", e))? {
@@ -217,6 +235,40 @@ impl Vault {
             has_master,
             remembered: has_master && !locked && key_file(&self.data_dir).exists(),
             ask_setup: !has_master && !asked_file(&self.data_dir).exists(),
+        }
+    }
+
+    /// Saves, and remembers that the file now on disk is ours.
+    fn save_secrets(&self, secrets: &SecretVault, key: &str) -> Result<(), String> {
+        secrets.save(&self.path, key).map_err(|e| e.to_string())?;
+        *self.stamp.lock().unwrap() = stamp_of(&self.path);
+        Ok(())
+    }
+
+    /// Picks up what ANOTHER BHTerminal process saved since this one last
+    /// looked.
+    ///
+    /// Two copies can run against one data folder (an old copy still in the
+    /// tray, a second launch before the single-instance guard). Each holds
+    /// the vault in memory, so without this a password saved in one is
+    /// invisible to the other — "it didn't keep my password" — and the other's
+    /// next save writes its stale picture over it, ERASING it. If the file
+    /// changed but this process's key no longer opens it (the other one
+    /// switched keys), that is an error and never an overwrite.
+    fn refresh(&self, secrets: &mut SecretVault, key: &str) -> Result<(), String> {
+        let now = stamp_of(&self.path);
+        if now == *self.stamp.lock().unwrap() {
+            return Ok(());
+        }
+        match try_open(&self.path, key)? {
+            Some(fresh) => {
+                *secrets = fresh;
+                *self.stamp.lock().unwrap() = now;
+                Ok(())
+            }
+            None => Err("The saved passwords were changed by another BHTerminal window. \
+                Quit BHTerminal from the tray icon and start it again."
+                .into()),
         }
     }
 
@@ -286,9 +338,9 @@ impl Vault {
             self.discard_staged();
             return Err(io_err("vault lock", e));
         }
-        if let Err(e) = secrets.save(&self.path, &key) {
+        if let Err(e) = self.save_secrets(secrets, &key) {
             self.discard_staged();
-            return Err(e.to_string());
+            return Err(e);
         }
         // Committed: from here the new key is the only one that works.
         *current_key = key;
@@ -338,6 +390,7 @@ impl Vault {
             if remember {
                 write_private(&key_file(&self.data_dir), key.as_bytes()).map_err(|e| io_err("vault key", e))?;
             }
+            *self.stamp.lock().unwrap() = stamp_of(&self.path);
             *st = State::Unlocked { secrets, key, has_master: true };
             return Ok(());
         }
@@ -352,6 +405,7 @@ impl Vault {
         if *has_master {
             self.check(key, current.unwrap_or(""))?;
         }
+        self.refresh(secrets, key)?;
         let result = self.rotate(secrets, key, new, remember);
         // Once the vault has moved, a master password IS set, even if the
         // tidy-up after it reported an error.
@@ -392,6 +446,7 @@ impl Vault {
         if remember {
             write_private(&key_file(&self.data_dir), key.as_bytes()).map_err(|e| io_err("vault key", e))
         } else {
+            self.refresh(secrets, key)?;
             self.rotate(secrets, key, current, false)
         }
     }
@@ -434,13 +489,18 @@ impl Vault {
         write_private(&key_file(d), key.as_bytes()).map_err(|e| io_err("vault key", e))?;
         // Ask again: having just lost one, they may want a new password.
         remove_if_present(&asked_file(d)).map_err(|e| io_err("reset", e))?;
+        *self.stamp.lock().unwrap() = stamp_of(&self.path);
         *st = State::Unlocked { secrets: SecretVault::new(), key, has_master: false };
         Ok(aside)
     }
 
     pub fn get(&self, account: &str) -> Option<String> {
-        match &*self.state.lock().unwrap() {
-            State::Unlocked { secrets, .. } => secrets.get(account).map(|s| s.to_string()),
+        match &mut *self.state.lock().unwrap() {
+            State::Unlocked { secrets, key, .. } => {
+                // Best effort: a failed refresh keeps what this process knows.
+                let _ = self.refresh(secrets, key);
+                secrets.get(account).map(|s| s.to_string())
+            }
             State::Locked => None,
         }
     }
@@ -452,12 +512,13 @@ impl Vault {
     pub fn remove(&self, accounts: &[String]) -> Result<(), String> {
         let mut st = self.state.lock().unwrap();
         let State::Unlocked { secrets, key, .. } = &mut *st else { return Err(LOCKED.into()) };
+        self.refresh(secrets, key)?;
         let mut changed = false;
         for a in accounts {
             changed |= secrets.remove(a);
         }
         if changed {
-            secrets.save(&self.path, key).map_err(|e| e.to_string())?;
+            self.save_secrets(secrets, key)?;
         }
         Ok(())
     }
@@ -465,8 +526,11 @@ impl Vault {
     /// A copy for backup export. The locking belongs with the vault rather
     /// than with the backup code, which is why this lives here.
     pub fn snapshot(&self) -> Result<SecretVault, String> {
-        match &*self.state.lock().unwrap() {
-            State::Unlocked { secrets, .. } => Ok(secrets.clone()),
+        match &mut *self.state.lock().unwrap() {
+            State::Unlocked { secrets, key, .. } => {
+                let _ = self.refresh(secrets, key);
+                Ok(secrets.clone())
+            }
             State::Locked => Err(LOCKED.into()),
         }
     }
@@ -477,8 +541,9 @@ impl Vault {
     pub fn mutate<T>(&self, f: impl FnOnce(&mut SecretVault) -> T) -> Result<T, String> {
         let mut st = self.state.lock().unwrap();
         let State::Unlocked { secrets, key, .. } = &mut *st else { return Err(LOCKED.into()) };
+        self.refresh(secrets, key)?;
         let out = f(secrets);
-        secrets.save(&self.path, key).map_err(|e| e.to_string())?;
+        self.save_secrets(secrets, key)?;
         Ok(out)
     }
 }
@@ -823,6 +888,42 @@ mod tests {
         std::fs::remove_file(key_file(d.path())).unwrap();
         assert!(Vault::open(d.path()).is_err());
         assert!(d.path().join("secrets.json").exists());
+    }
+
+    #[test]
+    fn two_windows_on_one_data_folder_do_not_erase_each_other() {
+        // The Windows report: a copy started earlier holds an old picture of
+        // the vault. A password saved in the OTHER copy must be visible to
+        // it, and its own next save must keep that password.
+        let d = dir();
+        let early = reopen(d.path());
+        let late = reopen(d.path());
+        late.set("host-A", "from-the-second-window").unwrap();
+        // The first window never saved anything, but it sees A…
+        assert_eq!(early.get("host-A").as_deref(), Some("from-the-second-window"));
+        // …and saving B in the first window keeps A on disk.
+        early.set("host-B", "from-the-first-window").unwrap();
+        let fresh = reopen(d.path());
+        assert_eq!(fresh.get("host-A").as_deref(), Some("from-the-second-window"));
+        assert_eq!(fresh.get("host-B").as_deref(), Some("from-the-first-window"));
+    }
+
+    #[test]
+    fn a_stale_window_refuses_to_overwrite_after_the_other_switched_keys() {
+        // The other window set a master password (a NEW key). This one's key
+        // no longer opens the file: it must say so, never overwrite.
+        let d = dir();
+        let stale = reopen(d.path());
+        stale.set("host-A", "one").unwrap();
+        let other = reopen(d.path());
+        other.set_master(None, "correct horse", false).unwrap();
+        other.set("host-B", "two").unwrap();
+        assert!(stale.set("host-C", "three").is_err());
+        // Nothing was overwritten: the other window's data is intact.
+        let after = reopen(d.path());
+        after.unlock("correct horse", false).unwrap();
+        assert_eq!(after.get("host-B").as_deref(), Some("two"));
+        assert_eq!(after.get("host-A").as_deref(), Some("one"));
     }
 
     #[test]

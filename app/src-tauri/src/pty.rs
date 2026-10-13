@@ -34,13 +34,29 @@ pub enum PtyEvent {
 pub struct AuthSecrets {
     pub password: Option<String>,
     pub passphrase: Option<String>,
+    /// True only for a saved SSH host. Turns on the "sent the saved
+    /// password" / "no saved password" lines — and keeps them OFF a local
+    /// shell, where a `sudo` prompt is none of BHTerminal's business.
+    pub notify: bool,
+    /// The host logs in with the ssh agent, so the editor has no password box
+    /// to point at: the hint says to switch the login method first.
+    pub agent: bool,
 }
 
 impl AuthSecrets {
     fn is_empty(&self) -> bool {
-        self.password.is_none() && self.passphrase.is_none()
+        self.password.is_none() && self.passphrase.is_none() && !self.notify
     }
 }
+
+/// The ONE write handle of a pty, shared by the keyboard and the auto-fill.
+///
+/// ⚠️ portable-pty hands the writer out once — "It is invalid to take the
+/// writer more than once" — and a second `take_writer()` returns an error.
+/// The auto-fill used to ask for its own, got `None` from `.ok()`, and so
+/// NEVER typed anything: every saved password and passphrase was ignored, with
+/// no error anywhere. Sharing the one handle is the only way both can write.
+type SharedWriter = Arc<Mutex<Box<dyn Write + Send>>>;
 
 /// The log file a session is writing to, shared with its reader thread so
 /// logging can be switched on and off while the session runs.
@@ -53,7 +69,7 @@ struct LogFile {
 
 struct Session {
     master: Box<dyn MasterPty + Send>,
-    writer: Box<dyn Write + Send>,
+    writer: SharedWriter,
     child: Box<dyn portable_pty::Child + Send + Sync>,
     log: LogSink,
 }
@@ -107,14 +123,13 @@ impl PtyRegistry {
             .master
             .try_clone_reader()
             .map_err(|e| format!("couldn't read from the pty: {e}"))?;
-        let writer = pair
-            .master
-            .take_writer()
-            .map_err(|e| format!("couldn't write to the pty: {e}"))?;
-
-        // A second writer handle, used only to answer ssh's auth prompts.
-        // Taken before `master` moves into the session below.
-        let fill_writer = if auth.is_empty() { None } else { pair.master.take_writer().ok() };
+        let writer: SharedWriter = Arc::new(Mutex::new(
+            pair.master
+                .take_writer()
+                .map_err(|e| format!("couldn't write to the pty: {e}"))?,
+        ));
+        // The same handle, for answering ssh's auth prompts.
+        let fill_writer = if auth.is_empty() { None } else { Some(Arc::clone(&writer)) };
 
         let log: LogSink = Arc::new(Mutex::new(None));
         let log_for_reader = Arc::clone(&log);
@@ -133,7 +148,7 @@ impl PtyRegistry {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
-                        filler.observe(&buf[..n]);
+                        let notes = filler.observe(&buf[..n]);
                         // Only what the server SENT is logged, never what was
                         // typed or filled in — a transcript must not end up
                         // holding the password that opened the session.
@@ -144,6 +159,14 @@ impl PtyRegistry {
                         }
                         if !on_event(PtyEvent::Output { data: B64.encode(&buf[..n]) }) {
                             break; // the receiver went away
+                        }
+                        // After the server's own output, so a line reads in the
+                        // order things happened. Display only: never logged,
+                        // never sent to the server.
+                        for note in notes {
+                            if !on_event(PtyEvent::Output { data: B64.encode(note.as_bytes()) }) {
+                                return;
+                            }
                         }
                     }
                     Err(_) => break,
@@ -156,10 +179,11 @@ impl PtyRegistry {
     }
 
     pub fn write(&self, id: &str, data: &[u8]) -> Result<(), String> {
-        let mut sessions = self.sessions.lock().unwrap();
-        let session = sessions.get_mut(id).ok_or("no such terminal")?;
-        session.writer.write_all(data).map_err(|e| e.to_string())?;
-        session.writer.flush().map_err(|e| e.to_string())
+        let sessions = self.sessions.lock().unwrap();
+        let session = sessions.get(id).ok_or("no such terminal")?;
+        let mut writer = session.writer.lock().unwrap();
+        writer.write_all(data).map_err(|e| e.to_string())?;
+        writer.flush().map_err(|e| e.to_string())
     }
 
     pub fn resize(&self, id: &str, cols: u16, rows: u16) -> Result<(), String> {
@@ -234,39 +258,82 @@ impl PtyRegistry {
 
 pub type SharedRegistry = Arc<PtyRegistry>;
 
-/// Types a stored secret when ssh asks for it.
+/// Types a stored secret when ssh asks for it, and says so.
 ///
 /// It watches only the tail of the stream, and only until the credentials are
 /// spent or the window closes — holding a password in memory for the life of
 /// a session that no longer needs it is pointless risk.
+///
+/// A saved PASSWORD is typed at most ONCE per connection. A wrong one would
+/// otherwise be retried at every re-prompt — burning the server's three
+/// attempts, tripping fail2ban on a live machine, and leaving the human with
+/// nothing left to type. After one rejection the human takes over.
 struct SecretFiller {
     auth: AuthSecrets,
-    writer: Option<Box<dyn Write + Send>>,
+    writer: Option<SharedWriter>,
     tail: Vec<u8>,
     /// A passphrase can legitimately be asked more than once (a jump host and
     /// the target each load the key); capped so a wrong one cannot loop.
-    remaining: u8,
+    passphrase_left: u8,
+    password_left: u8,
+    sent_password: bool,
+    told_no_password: bool,
     started: Instant,
 }
 
 impl SecretFiller {
     /// Enough to hold a prompt line; prompts are short and we only need the
-    /// last one.
-    const WINDOW: usize = 256;
+    /// last one. Generous, because a ConPTY redraw puts escape sequences
+    /// around it.
+    const WINDOW: usize = 1024;
     /// After this, auth has either succeeded or is waiting on a human.
     const GIVE_UP_AFTER: Duration = Duration::from_secs(180);
+    /// Typed this long after the prompt is SEEN. ConPTY paints the prompt a
+    /// beat before ssh is reading the console, and a key sent into that gap
+    /// can be dropped.
+    const SETTLE: Duration = Duration::from_millis(120);
 
-    fn new(auth: AuthSecrets, writer: Option<Box<dyn Write + Send>>) -> Self {
-        SecretFiller { auth, writer, tail: Vec::new(), remaining: 3, started: Instant::now() }
+    fn new(auth: AuthSecrets, writer: Option<SharedWriter>) -> Self {
+        SecretFiller {
+            auth,
+            writer,
+            tail: Vec::new(),
+            passphrase_left: 2,
+            password_left: 1,
+            sent_password: false,
+            told_no_password: false,
+            started: Instant::now(),
+        }
     }
 
-    fn observe(&mut self, chunk: &[u8]) {
-        if self.writer.is_none() || self.remaining == 0 {
-            return;
+    fn done(&self) -> bool {
+        self.writer.is_none()
+    }
+
+    /// Display-only lines for the terminal, in dim text.
+    fn note(text: &str) -> String {
+        format!("\r\n\x1b[2m[BHTerminal] {text}\x1b[0m\r\n")
+    }
+
+    fn type_in(&self, secret: &str) {
+        std::thread::sleep(Self::SETTLE);
+        if let Some(w) = &self.writer {
+            if let Ok(mut w) = w.lock() {
+                let _ = w.write_all(secret.as_bytes());
+                let _ = w.write_all(b"\r");
+                let _ = w.flush();
+            }
+        }
+    }
+
+    fn observe(&mut self, chunk: &[u8]) -> Vec<String> {
+        let mut notes = Vec::new();
+        if self.done() {
+            return notes;
         }
         if self.started.elapsed() > Self::GIVE_UP_AFTER {
             self.forget();
-            return;
+            return notes;
         }
 
         self.tail.extend_from_slice(chunk);
@@ -276,33 +343,65 @@ impl SecretFiller {
         }
         let text = String::from_utf8_lossy(&self.tail).into_owned();
 
+        // The server turned our saved password down: say so, once, and leave
+        // the retry to the human.
+        if self.sent_password && bhterm_core::prompt::strip_ansi(&text).to_lowercase().contains("permission denied") {
+            self.sent_password = false;
+            if self.auth.notify {
+                notes.push(Self::note(
+                    "The server rejected the saved password. Type the right one, or fix it under Edit host (the username matters too).",
+                ));
+            }
+        }
+
         // Never answer a host-key question or a 2FA code with a stored
         // secret — only the user can answer those.
-        let secret = match what_is_wanted(&text) {
-            Some(Wanted::Passphrase) => self.auth.passphrase.clone(),
-            Some(Wanted::Password) => self.auth.password.clone(),
-            Some(Wanted::Human) | None => None,
-        };
-        let Some(secret) = secret else { return };
-
-        if let Some(w) = self.writer.as_mut() {
-            let _ = w.write_all(secret.as_bytes());
-            let _ = w.write_all(b"\r");
-            let _ = w.flush();
+        match what_is_wanted(&text) {
+            Some(Wanted::Passphrase) if self.passphrase_left > 0 => {
+                if let Some(secret) = self.auth.passphrase.clone() {
+                    self.type_in(&secret);
+                    self.passphrase_left -= 1;
+                    self.tail.clear();
+                    if self.auth.notify {
+                        notes.push(Self::note("Sent the saved key passphrase."));
+                    }
+                }
+            }
+            Some(Wanted::Password) if self.password_left > 0 => {
+                if let Some(secret) = self.auth.password.clone() {
+                    self.type_in(&secret);
+                    self.password_left -= 1;
+                    self.sent_password = true;
+                    self.tail.clear();
+                    if self.auth.notify {
+                        notes.push(Self::note("Sent the saved password."));
+                    }
+                } else if self.auth.notify && !self.told_no_password {
+                    self.told_no_password = true;
+                    notes.push(Self::note(if self.auth.agent {
+                        "No saved password. Type it here — or set this host's login to Password under Edit host to save it."
+                    } else {
+                        "No saved password for this host. Type it here, or save it under Edit host."
+                    }));
+                }
+            }
+            _ => {}
         }
-        self.remaining -= 1;
-        // Don't re-match the same prompt still sitting in the window.
-        self.tail.clear();
-        if self.remaining == 0 {
+
+        // Nothing left to offer, and nothing left to report.
+        if self.passphrase_left == 0 && self.password_left == 0 && !self.sent_password {
             self.forget();
         }
+        notes
     }
 
     fn forget(&mut self) {
         self.auth = AuthSecrets::default();
         self.writer = None;
         self.tail.clear();
-        self.remaining = 0;
+        self.passphrase_left = 0;
+        self.password_left = 0;
+        self.sent_password = false;
     }
 }
 
@@ -312,6 +411,149 @@ mod tests {
     use base64::Engine;
     use std::sync::mpsc;
     use std::time::Duration;
+
+    /// Runs `script` as a stand-in for ssh and returns everything it printed.
+    /// `then` is typed by the "human" after the given delay.
+    fn run_fake_ssh(script: &str, auth: AuthSecrets, then: Option<(u64, &str)>) -> String {
+        let registry = PtyRegistry::default();
+        let (tx, rx) = mpsc::channel::<PtyEvent>();
+        registry
+            .spawn(
+                "fake".into(),
+                "/bin/sh",
+                &["-c".to_string(), script.to_string()],
+                100,
+                30,
+                auth,
+                move |e| tx.send(e).is_ok(),
+            )
+            .unwrap();
+        let start = std::time::Instant::now();
+        let mut out = Vec::new();
+        let mut typed = then.is_none();
+        loop {
+            match rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(PtyEvent::Output { data }) => out.extend(B64.decode(data).unwrap()),
+                Ok(PtyEvent::Exit { .. }) => break,
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+            }
+            if let (false, Some((after, input))) = (typed, then) {
+                if start.elapsed() > Duration::from_millis(after) {
+                    typed = true;
+                    registry.write("fake", input.as_bytes()).unwrap();
+                }
+            }
+            if start.elapsed() > Duration::from_secs(15) {
+                break;
+            }
+        }
+        String::from_utf8_lossy(&out).into_owned()
+    }
+
+    fn pw(secret: &str) -> AuthSecrets {
+        AuthSecrets { password: Some(secret.into()), notify: true, ..AuthSecrets::default() }
+    }
+
+    /// The bug that made every saved password a no-op: the auto-fill asked
+    /// the pty for a SECOND writer, the library refuses that, and `.ok()`
+    /// turned the refusal into silence. The password must reach the program,
+    /// byte for byte, followed by Enter.
+    #[test]
+    fn the_saved_password_is_typed_exactly_when_ssh_asks() {
+        // Spaces, quotes, `$`, a backslash and Bengali: nothing may be
+        // mangled on the way in.
+        let secret = "P@ss w0rd!\"'$HOME\\ পাসওয়ার্ড";
+        let out = run_fake_ssh(
+            "stty -echo; printf \"root@h's password: \"; IFS= read -r p; printf '\\nGOT:[%s]\\n' \"$p\"",
+            pw(secret),
+            None,
+        );
+        assert!(out.contains(&format!("GOT:[{secret}]")), "the secret did not arrive intact: {out:?}");
+        assert!(out.contains("Sent the saved password"), "no visible confirmation: {out:?}");
+    }
+
+    /// ConPTY (Windows) re-draws the screen, so the prompt arrives wrapped in
+    /// a window-title sequence and cursor/visibility codes. It must still be
+    /// recognised.
+    #[test]
+    fn a_prompt_wrapped_in_windows_control_codes_is_still_answered() {
+        let out = run_fake_ssh(
+            "stty -echo; printf '\\033[?25l\\033]0;C:\\\\ssh.exe\\007\\033[25;1Hroot@h'\"'\"'s password: \\033[25;28H\\033[?25h'; \
+             IFS= read -r p; printf '\\nGOT:[%s]\\n' \"$p\"",
+            pw("conpty-secret"),
+            None,
+        );
+        assert!(out.contains("GOT:[conpty-secret]"), "control codes hid the prompt: {out:?}");
+    }
+
+    /// A wrong saved password is tried ONCE. Retrying at every re-prompt
+    /// burns the server's attempts (and trips fail2ban on a live machine),
+    /// and leaves nothing for the human to type.
+    #[test]
+    fn a_rejected_saved_password_is_not_retried_and_the_human_can_type() {
+        let out = run_fake_ssh(
+            "stty -echo; \
+             printf \"root@h's password: \"; IFS= read -r a; printf '\\nGOT1:[%s]\\nPermission denied, please try again.\\n' \"$a\"; \
+             printf \"root@h's password: \"; IFS= read -r b; printf '\\nGOT2:[%s]\\n' \"$b\"",
+            pw("wrong-saved"),
+            Some((2500, "typed-by-human\r")),
+        );
+        assert!(out.contains("GOT1:[wrong-saved]"), "{out:?}");
+        assert!(out.contains("GOT2:[typed-by-human]"), "the second prompt must be left to the human: {out:?}");
+        assert!(!out.contains("GOT2:[wrong-saved]"), "the wrong password was retried: {out:?}");
+        assert!(out.contains("server rejected the saved password"), "no explanation shown: {out:?}");
+    }
+
+    #[test]
+    fn with_no_saved_password_it_says_so_and_types_nothing() {
+        let out = run_fake_ssh(
+            "stty -echo; printf \"root@h's password: \"; IFS= read -r -t 2 p; printf '\\nGOT:[%s]\\n' \"$p\"",
+            AuthSecrets { notify: true, ..AuthSecrets::default() },
+            None,
+        );
+        assert!(out.contains("GOT:[]"), "something was typed with nothing saved: {out:?}");
+        assert!(out.contains("No saved password for this host"), "{out:?}");
+    }
+
+    #[test]
+    fn an_agent_host_is_told_how_to_save_a_password() {
+        let out = run_fake_ssh(
+            "stty -echo; printf \"root@h's password: \"; IFS= read -r -t 2 p; printf '\\nGOT:[%s]\\n' \"$p\"",
+            AuthSecrets { notify: true, agent: true, ..AuthSecrets::default() },
+            None,
+        );
+        assert!(out.contains("GOT:[]"), "{out:?}");
+        assert!(out.contains("set this host's login to Password"), "{out:?}");
+    }
+
+    /// A local shell is none of BHTerminal's business: a `sudo` prompt there
+    /// must not get a saved password, nor a comment.
+    #[test]
+    fn a_local_shell_prompt_is_never_answered_or_commented_on() {
+        let out = run_fake_ssh(
+            "stty -echo; printf '[sudo] password for me: '; IFS= read -r -t 2 p; printf '\\nGOT:[%s]\\n' \"$p\"",
+            AuthSecrets::default(),
+            None,
+        );
+        assert!(out.contains("GOT:[]"), "{out:?}");
+        assert!(!out.contains("[BHTerminal]"), "{out:?}");
+    }
+
+    /// A password prompt that shows up long after login (a remote `sudo`)
+    /// must not receive the saved password a second time.
+    #[test]
+    fn the_saved_password_is_not_offered_again_at_a_later_prompt() {
+        let out = run_fake_ssh(
+            "stty -echo; \
+             printf \"root@h's password: \"; IFS= read -r a; printf '\\nGOT1:[%s]\\nWelcome\\n' \"$a\"; \
+             printf '[sudo] password for root: '; IFS= read -r -t 2 b; printf '\\nGOT2:[%s]\\n' \"$b\"",
+            pw("login-secret"),
+            None,
+        );
+        assert!(out.contains("GOT1:[login-secret]"), "{out:?}");
+        assert!(out.contains("GOT2:[]"), "the password was typed into a later prompt: {out:?}");
+    }
 
     /// Proves the pty round-trip end to end: a child is spawned, its output
     /// reaches the callback as bytes, and EOF produces an Exit. If this

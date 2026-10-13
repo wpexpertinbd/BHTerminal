@@ -27,6 +27,76 @@ const AUTH_NEEDLES: &[&str] = &[
     "authenticity of host",
 ];
 
+/// Removes terminal control sequences, leaving the text a person would read.
+///
+/// ⚠️ Raw ssh output is clean on macOS and Linux, but on Windows the pty is a
+/// ConPTY, which RE-DRAWS the screen: the prompt arrives wrapped in cursor
+/// moves and `ESC[?25h`-style sequences, often with one trailing it. Matching
+/// the prompt against that raw stream means "ends with a colon" is never true,
+/// so a saved password is never offered. Strip first, match second.
+pub fn strip_ansi(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\u{1b}' => match chars.next() {
+                // CSI: parameters/intermediates, then one final byte 0x40–0x7E.
+                Some('[') => {
+                    for n in chars.by_ref() {
+                        if ('\u{40}'..='\u{7e}').contains(&n) {
+                            break;
+                        }
+                    }
+                }
+                // OSC (window title and friends): ends at BEL or ESC \.
+                Some(']') => {
+                    while let Some(n) = chars.next() {
+                        if n == '\u{7}' {
+                            break;
+                        }
+                        if n == '\u{1b}' {
+                            chars.next();
+                            break;
+                        }
+                    }
+                }
+                // DCS / SOS / PM / APC: strings that end at ESC \.
+                Some('P' | 'X' | '^' | '_') => {
+                    while let Some(n) = chars.next() {
+                        if n == '\u{1b}' {
+                            chars.next();
+                            break;
+                        }
+                    }
+                }
+                // Character-set selection takes one more byte.
+                Some('(' | ')' | '*' | '+') => {
+                    chars.next();
+                }
+                // Any other two-byte escape (ESC 7, ESC =, ESC c …).
+                _ => {}
+            },
+            // Keep line structure; drop bells, backspaces and the rest.
+            '\n' | '\r' | '\t' => out.push(c),
+            c if (c as u32) < 0x20 || c as u32 == 0x7f => {}
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// The last line a person would see, after control sequences and carriage
+/// returns are accounted for (`\rprompt` is how ssh redraws a line).
+fn last_visible_line(output: &str) -> String {
+    let clean = strip_ansi(output);
+    let line = clean.rsplit('\n').next().unwrap_or("");
+    line.rsplit('\r')
+        .find(|seg| !seg.trim().is_empty())
+        .unwrap_or("")
+        .trim()
+        .to_string()
+}
+
 /// Whether the last line of `output` is a prompt waiting for input.
 ///
 /// Prompts do not end in a newline, so the tail ends with ":" / "?" / a
@@ -34,12 +104,7 @@ const AUTH_NEEDLES: &[&str] = &[
 /// match a finished line that merely mentions a password, and requiring only
 /// the punctuation would match any shell prompt.
 pub fn looks_like_auth_prompt(output: &str) -> bool {
-    let last_line = output
-        .split('\n')
-        .next_back()
-        .unwrap_or("")
-        .trim()
-        .to_lowercase();
+    let last_line = last_visible_line(output).to_lowercase();
     if last_line.is_empty() {
         return false;
     }
@@ -66,7 +131,7 @@ pub fn what_is_wanted(output: &str) -> Option<Wanted> {
     if !looks_like_auth_prompt(output) {
         return None;
     }
-    let tail = output.split('\n').next_back().unwrap_or("").to_lowercase();
+    let tail = last_visible_line(output).to_lowercase();
     if tail.contains("passphrase for") {
         Some(Wanted::Passphrase)
     } else if tail.contains("(yes/no") || tail.contains("authenticity of host") {

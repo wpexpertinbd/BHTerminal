@@ -73,12 +73,16 @@ fn open_terminal(
         bhterm_core::AuthMethod::Password {} => AuthSecrets {
             password: vault.get(&host.secret_account_for()),
             passphrase: None,
+            notify: true,
+            agent: false,
         },
         bhterm_core::AuthMethod::PrivateKey { .. } => AuthSecrets {
             password: None,
             passphrase: vault.get(&host.passphrase_account_for()),
+            notify: true,
+            agent: false,
         },
-        bhterm_core::AuthMethod::Agent {} => AuthSecrets::default(),
+        bhterm_core::AuthMethod::Agent {} => AuthSecrets { notify: true, agent: true, ..AuthSecrets::default() },
     };
 
     let pane_id = Uuid::new_v4().to_string();

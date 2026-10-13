@@ -53,3 +53,56 @@ fn sends_the_right_secret_and_never_guesses_at_a_host_key() {
     assert_eq!(what_is_wanted("Verification code: "), Some(Wanted::Human));
     assert_eq!(what_is_wanted("[root@s1 ~]# "), None);
 }
+
+/// Windows runs the terminal through ConPTY, which re-draws the screen: the
+/// prompt arrives with a window-title sequence in front and cursor/visibility
+/// codes behind. Matched raw, "ends with a colon" was never true there, so a
+/// saved password was never offered.
+#[test]
+fn a_prompt_wrapped_in_conpty_control_codes_is_still_a_prompt() {
+    for s in [
+        "\x1b[?25l\x1b]0;C:\\Windows\\System32\\OpenSSH\\ssh.exe\x07root@host's password: \x1b[?25h",
+        "\x1b[25;1Hroot@host's password: \x1b[25;28H",
+        "\x1b[2J\x1b[H\x1b[mbenjamin@10.0.0.5's password: \x1b[?25h\x1b[25;31H",
+        "\x1b[1mEnter passphrase for key 'C:\\Users\\b\\.ssh\\id_ed25519':\x1b[0m ",
+        "\rroot@host's password: ",
+    ] {
+        assert!(looks_like_auth_prompt(s), "should be waiting: {s:?}");
+    }
+    assert_eq!(
+        what_is_wanted("\x1b[?25lroot@host's password: \x1b[?25h"),
+        Some(Wanted::Password)
+    );
+    assert_eq!(
+        what_is_wanted("\x1b]0;ssh\x07\x1b[1mEnter passphrase for key 'x':\x1b[0m "),
+        Some(Wanted::Passphrase)
+    );
+}
+
+#[test]
+fn control_codes_do_not_turn_ordinary_output_into_a_prompt() {
+    for s in [
+        "\x1b[32m[root@s1 ~]# \x1b[0m",
+        "\x1b]0;root@s1:~\x07[root@s1 ~]# ",
+        // A prompt that was answered: the newline after it ends the wait.
+        "root@host's password: \r\n\x1b[?25h",
+    ] {
+        assert!(!looks_like_auth_prompt(s), "should NOT be waiting: {s:?}");
+    }
+}
+
+#[test]
+fn strip_ansi_keeps_the_words_and_drops_the_codes() {
+    use bhterm_core::prompt::strip_ansi;
+    assert_eq!(strip_ansi("\x1b[1;31mred\x1b[0m text"), "red text");
+    assert_eq!(strip_ansi("a\x1b]0;title\x07b"), "ab");
+    assert_eq!(strip_ansi("a\x1b]0;title\x1b\\b"), "ab");
+    assert_eq!(strip_ansi("a\x1b(Bb"), "ab");
+    // An escape cut off at the end of a chunk must not leak into the text.
+    assert_eq!(strip_ansi("password:\x1b[?2"), "password:");
+    assert_eq!(strip_ansi("password:\x1b"), "password:");
+    // Line structure survives; bells and backspaces do not.
+    assert_eq!(strip_ansi("a\r\nb\x07\x08"), "a\r\nb");
+    // Non-ASCII text is untouched.
+    assert_eq!(strip_ansi("\x1b[mপাসওয়ার্ড:"), "পাসওয়ার্ড:");
+}
