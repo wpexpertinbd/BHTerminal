@@ -181,6 +181,9 @@ export function HostEditor({ host, isNew, folders, hosts, onSaved, onCancel }: P
             <input
               value={draft.hostname}
               placeholder="203.0.113.10"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
               onChange={(e) => set("hostname", e.target.value)}
             />
           </label>
@@ -199,7 +202,23 @@ export function HostEditor({ host, isNew, folders, hosts, onSaved, onCancel }: P
         {!isVnc && (
           <label className="field">
             <span>Username</span>
-            <input value={draft.username} placeholder="root" onChange={(e) => set("username", e.target.value)} />
+            <input
+              value={draft.username}
+              placeholder="root"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              onChange={(e) => set("username", e.target.value)}
+            />
+            {draft.username.toLowerCase() === "root" && draft.username !== "root" && (
+              <p className="hint warn">
+                Linux logins are case-sensitive: “{draft.username}” is not “root”, and the server will
+                refuse it.{" "}
+                <button type="button" className="link" onClick={() => set("username", "root")}>
+                  Use root
+                </button>
+              </p>
+            )}
           </label>
         )}
 

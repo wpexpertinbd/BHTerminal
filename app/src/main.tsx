@@ -25,6 +25,36 @@ document.addEventListener(
   { capture: true }
 );
 
+// ⚠️ macOS can capitalise the first letter of an empty text field ("Capitalize
+// words automatically" in Keyboard settings reaches web views): a username
+// typed as `root` was saved as `Root`, and Linux logins are case-sensitive, so
+// that host could never log in. Every box in this app holds something exact —
+// a login, an address, a command, a file name — so none of them may be
+// "helped". The attributes are set the moment a field exists, before anyone can
+// focus it, and again on focus for anything missed.
+function noAutoFix(el: Element) {
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+    el.setAttribute("autocapitalize", "off");
+    el.setAttribute("autocorrect", "off");
+    el.setAttribute("spellcheck", "false");
+  }
+}
+function noAutoFixTree(root: ParentNode) {
+  root.querySelectorAll("input, textarea").forEach(noAutoFix);
+}
+noAutoFixTree(document);
+new MutationObserver((records) => {
+  for (const r of records) {
+    r.addedNodes.forEach((n) => {
+      if (n instanceof Element) {
+        noAutoFix(n);
+        noAutoFixTree(n);
+      }
+    });
+  }
+}).observe(document.documentElement, { childList: true, subtree: true });
+document.addEventListener("focusin", (e) => e.target instanceof Element && noAutoFix(e.target), true);
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <Root />
