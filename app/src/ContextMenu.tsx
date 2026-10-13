@@ -28,6 +28,17 @@ interface Props {
  *  appears if nothing takes the event. */
 export function ContextMenu({ x, y, items, onClose }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
+  // Whatever had keyboard focus when the menu opened — for a terminal, its
+  // hidden input. ⚠️ A menu button takes focus when it is clicked and then
+  // unmounts, which leaves focus on nothing: after Paste the very next
+  // keystroke, usually the Enter that submits a pasted password, went nowhere.
+  // No error, no connection attempt, just a terminal that looked dead.
+  const previous = useRef<Element | null>(document.activeElement);
+  const giveFocusBack = () =>
+    requestAnimationFrame(() => {
+      const el = previous.current;
+      if (el instanceof HTMLElement && el.isConnected) el.focus();
+    });
 
   useEffect(() => {
     // Keep the menu on screen: flip it up or left when it would overflow,
@@ -40,7 +51,10 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
     }
     const dismiss = (e: Event) => {
       if (e instanceof KeyboardEvent) {
-        if (e.key === "Escape") onClose();
+        if (e.key === "Escape") {
+          onClose();
+          giveFocusBack();
+        }
         return;
       }
       // ⚠️ A press INSIDE the menu belongs to the menu. Closing on it would
@@ -73,6 +87,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
             onClick={() => {
               onClose();
               if ("run" in item) item.run?.();
+              giveFocusBack();
             }}
           >
             {"label" in item ? item.label : ""}
