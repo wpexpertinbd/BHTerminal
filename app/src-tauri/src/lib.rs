@@ -633,7 +633,23 @@ pub fn run() {
         Vault::open(&data_dir).expect("cannot open the credential vault"),
     );
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // One BHTerminal per user. Closing the window only HIDES the app (the
+    // sessions live on in the tray), so launching the shortcut again used to
+    // start a second copy — and a second tray icon. Now the second launch
+    // hands over to the one that is running, which shows its window, and
+    // exits. It must be the FIRST plugin registered.
+    //
+    // Skipped when BHTERMINAL_DATA_DIR is set: that is a deliberate,
+    // separate instance (a test or a screenshot on throwaway data) and must
+    // be able to run beside the real one rather than being swallowed by it.
+    let separate_instance = std::env::var_os("BHTERMINAL_DATA_DIR").is_some_and(|v| !v.is_empty());
+    if !separate_instance {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_main_window(app);
+        }));
+    }
+    builder
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())

@@ -20,6 +20,7 @@ tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
 # Unix pty AND Windows ConPTY behind one API — the reason a single terminal
 # implementation can serve all three platforms. From the WezTerm project.
 portable-pty = "0.9"
