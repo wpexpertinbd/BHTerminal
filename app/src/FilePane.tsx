@@ -20,11 +20,23 @@ interface Props {
   onFollowChange: (on: boolean) => void;
   /** Hides the pane, leaving a rail to bring it back. */
   onCollapse: () => void;
+  /** How the host logs in — decides what "connecting" really means. */
+  authKind?: "password" | "privateKey" | "agent";
+  /** True where the file pane rides the terminal's own login (macOS/Linux);
+   *  false on Windows, where it has to sign in by itself. */
+  sharesLogin?: boolean;
 }
 
-export function FilePane({ hostId, terminalCwd, follow, onFollowChange, onCollapse }: Props) {
+export function FilePane({
+  hostId, terminalCwd, follow, onFollowChange, onCollapse, authKind, sharesLogin = true,
+}: Props) {
+  // A password host never dials the server from here: it waits for the
+  // terminal's login, which can take as long as a person takes to type.
+  const connectingText =
+    authKind === "password" && sharesLogin ? "Waiting for the terminal login…" : "Connecting…";
   const [listing, setListing] = useState<Listing | null>(null);
-  const [status, setStatus] = useState("Connecting…");
+  const [status, setStatus] = useState(connectingText);
+  const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuAction[] } | null>(null);
@@ -64,16 +76,37 @@ export function FilePane({ hostId, terminalCwd, follow, onFollowChange, onCollap
 
   // One session per host, opened once. Reconnecting on every mount is what
   // made the old build spend its time reconnecting instead of browsing.
-  useEffect(() => {
-    let cancelled = false;
-    setStatus("Connecting…");
+  // `connectSeq` makes only the newest attempt count, so a stale answer from an
+  // earlier attempt (or an unmounted pane) can never overwrite a newer state.
+  const connectSeq = useRef(0);
+  const connect = useCallback(() => {
+    const mine = ++connectSeq.current;
+    setFailed(false);
+    setStatus(connectingText);
     api
       .sftpConnect(hostId)
       .then((l) => {
-        if (!cancelled) { setListing(l); setStatus(""); }
+        if (connectSeq.current !== mine) return;
+        setListing(l);
+        setStatus("");
       })
-      .catch((e) => !cancelled && setStatus(String(e)));
-    return () => { cancelled = true; };
+      .catch((e) => {
+        if (connectSeq.current !== mine) return;
+        setStatus(String(e));
+        setFailed(true);
+      });
+  }, [hostId, connectingText]);
+
+  useEffect(() => {
+    connect();
+    return () => {
+      connectSeq.current++;
+      // Don't leave a thread waiting on a login nobody is watching for.
+      api.sftpCancelWait(hostId).catch(() => {});
+    };
+    // Only when the host changes; `connect` is rebuilt for the same host by a
+    // prop change and must not restart a login that is already in progress.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hostId]);
 
   // Follow the terminal. "~" is expanded against the directory the SFTP
@@ -316,7 +349,13 @@ export function FilePane({ hostId, terminalCwd, follow, onFollowChange, onCollap
     <div className="files">
       <div className="files-bar">
         <button disabled={!listing || listing.path === "/"} onClick={() => listing && load(remoteParent(listing.path))} title="Up">↑</button>
-        <button disabled={!listing} onClick={() => listing && load(listing.path)} title="Refresh">↻</button>
+        <button
+          disabled={!listing && !failed}
+          onClick={() => (listing ? load(listing.path) : connect())}
+          title={listing ? "Refresh" : "Try again"}
+        >
+          ↻
+        </button>
         <button disabled={!listing} onClick={makeFolder} title="New folder">＋</button>
         <button disabled={!listing} onClick={upload} title="Upload…">⤒</button>
         {busy && <span className="spin">…</span>}
@@ -328,7 +367,18 @@ export function FilePane({ hostId, terminalCwd, follow, onFollowChange, onCollap
       <div className="files-path" title={listing?.path}>{listing?.path ?? ""}</div>
 
       <div className="files-list" onContextMenu={backgroundMenu}>
-        {status && <div className="files-status">{status}</div>}
+        {status && (
+          <div className="files-status">
+            {status}
+            {failed && !listing && (
+              <div>
+                <button className="retry" onClick={connect}>
+                  Try again
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         {listing?.entries.map((e) => (
           <div
             key={e.name}

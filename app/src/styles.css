@@ -635,3 +635,10 @@ body.resizing * { cursor: col-resize !important; }
   cursor: pointer; text-decoration: underline;
 }
 /* END BHTERM-INLINE-LINK */
+
+/* BHTERM-FILES-RETRY */
+.files-status .retry {
+  margin-top: 8px; font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text);
+}
+/* END BHTERM-FILES-RETRY */

@@ -88,6 +88,31 @@ What it does **not** do, stated plainly:
 - Anyone at an unlocked app with no master password set can set one — and lock
   you out of the saved passwords. Set one yourself if that matters to you.
 
+## The file pane and saved passwords
+
+On macOS and Linux the file pane rides the terminal's own connection, so it
+never sends a password itself: for a password host it waits — on the local
+control socket, which costs the server nothing — until the terminal's login
+has finished. (An earlier build dialled the server every 1.2 s while you typed;
+that is dozens of failed logins and what trips fail2ban / OpenSSH's own
+penalties.)
+
+On Windows OpenSSH cannot share a connection, so the file pane signs in on its
+own with the saved password, exactly once. The password goes to that one ssh
+process through ssh's standard `SSH_ASKPASS` mechanism, with BHTerminal itself
+as the helper:
+
+- It is handed over in the child's **environment**, never on a command line
+  (where `tasklist`/`ps` would show it). Same-user processes could read that
+  environment — the same trust as the saved-password vault in memory.
+- The helper answers **only** the account-password prompt for the exact
+  `user@host` it was started for. It refuses passphrases, host-key questions,
+  codes, password changes and — importantly — a **jump host's** own prompt,
+  because ssh passes its environment on to anything it starts. Through a jump
+  host the Windows file pane does not sign in by itself.
+- Note that `StrictHostKeyChecking no` in your own `~/.ssh/config` would let
+  ssh send a password to an unverified host; that is your setting, not ours.
+
 ## Backups
 
 A backup holding saved passwords is always encrypted (AES-GCM under a PBKDF2 key,

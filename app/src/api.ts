@@ -194,6 +194,8 @@ export const api = {
   sftpUploadTo: (hostId: string, local: string, remote: string) =>
     invoke<number>("sftp_upload_to", { hostId, local, remote }),
   sftpPrune: (keep: string[]) => invoke<void>("sftp_prune", { keep }),
+  /** The pane went away: stop waiting for a terminal login on its behalf. */
+  sftpCancelWait: (hostId: string) => invoke<void>("sftp_cancel_wait", { hostId }),
 
   vncPrepare: (hostId: string) => invoke<string>("vnc_prepare", { hostId }),
 

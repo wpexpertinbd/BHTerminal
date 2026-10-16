@@ -13,6 +13,7 @@ mod sftp_session;
 mod transfer;
 mod tunnels;
 mod updater;
+mod askpass;
 mod vault;
 mod vnc_bridge;
 
@@ -440,11 +441,28 @@ fn tunnel_status(
 
 /// Builds the SFTP argv for a host and opens (or reuses) its session.
 ///
-/// Blocking work — the handshake and the retry window both wait on the
-/// network — so it runs off the UI thread.
+/// Opens the file pane's channel for a host.
+///
+/// How depends on how the host logs in, because every login attempt is one
+/// the SERVER counts:
+///
+/// - **Password host, shared connection available (macOS/Linux):** never dial
+///   it. The channel runs without a tty, so any attempt is a guaranteed failed
+///   login. Wait — on the local control socket, free for the server — until
+///   the terminal's own login finishes, then ride that connection.
+/// - **Key / agent host:** one direct attempt (instant when the key just
+///   works); if that fails the key probably needs a passphrase typed in the
+///   terminal, so fall back to waiting for the terminal exactly as above.
+/// - **Windows (no shared connection):** a password host logs in by itself,
+///   ONCE, with the saved password handed over through askpass; with no saved
+///   password there is nothing to log in with, and it says so.
+///
+/// Blocking work — it waits on the network and on a person — so it runs off
+/// the UI thread.
 #[tauri::command]
 async fn sftp_connect(
     sftp: tauri::State<'_, SharedSftp>,
+    vault: tauri::State<'_, SharedVault>,
     host_id: String,
 ) -> Result<Listing, String> {
     let id: Uuid = host_id.parse().map_err(|_| "bad host id".to_string())?;
@@ -455,18 +473,88 @@ async fn sftp_connect(
     let socket_dir = paths::control_socket_dir().map_err(|e| e.to_string())?;
     let cm = ssh::ControlMaster { socket_dir: &socket_dir };
     let args = ssh::build_sftp(&host, jump.as_ref(), Some(&cm)).map_err(|e| e.to_string())?;
+    let check = ssh::build_check_master(&host, jump.as_ref(), &cm).map_err(|e| e.to_string())?;
+    let is_password = matches!(host.auth_method, bhterm_core::AuthMethod::Password {});
+
+    // Windows + password: its own login, with the saved password.
+    let own_login = if check.is_none() && is_password {
+        let secret = vault.get(&host.secret_account_for()).ok_or(
+            "On Windows the file pane signs in on its own, so it needs a saved password. \
+             Save it under Edit host (the terminal's login can't be shared here).",
+        )?;
+        // Through a jump host the file pane would have to answer the jump
+        // host's login too, and the saved password belongs to the TARGET only.
+        if jump.is_some() {
+            return Err(
+                "On Windows the file pane can't sign in through a jump host by itself \
+                 (the saved password is for the target, not the jump host)."
+                    .into(),
+            );
+        }
+        let login_args = ssh::build_sftp_password(&host, None).map_err(|e| e.to_string())?;
+        Some((login_args, askpass::env_for(&secret, &ssh::destination(&host))?))
+    } else {
+        None
+    };
 
     let sftp = sftp.inner().clone();
     let key = host_id.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // 45s: long enough to cover someone typing a key passphrase into the
-        // terminal next door, which is what the master is waiting on.
-        sftp.connect(key.clone(), ssh_program(), &args, Duration::from_secs(45))?;
+        let program = ssh_program();
+        match (&check, own_login) {
+            // Windows, password: one attempt.
+            (None, Some((login_args, env))) => {
+                sftp.connect(key.clone(), program, &login_args, &env, Duration::ZERO)?;
+            }
+            // Windows, key or agent: no password to prompt for, retrying is cheap.
+            (None, None) => {
+                sftp.connect(key.clone(), program, &args, &[], Duration::from_secs(45))?;
+            }
+            // Shared connection, password host: wait for the terminal's login,
+            // then ONE attempt over it. Not a retry loop: if the shared
+            // connection vanished in between, every retry would be a failed
+            // login against the server — the very thing this avoids.
+            (Some(check), _) if is_password => {
+                sftp.wait_for_master(&key, program, check, MASTER_WAIT)?;
+                sftp.connect(key.clone(), program, &args, &[], Duration::ZERO)?;
+            }
+            // Shared connection, key or agent: try directly, else wait.
+            (Some(check), _) => {
+                if let Err(first) = sftp.connect(key.clone(), program, &args, &[], Duration::ZERO) {
+                    // A network problem will not fix itself while we wait for a
+                    // terminal login: say so now, with ssh's own words, instead
+                    // of showing "Connecting…" for 15 minutes.
+                    if is_unreachable(&first) {
+                        return Err(first);
+                    }
+                    sftp.wait_for_master(&key, program, check, MASTER_WAIT)?;
+                    sftp.connect(key.clone(), program, &args, &[], Duration::from_secs(20))?;
+                }
+            }
+        }
         sftp.list(&key, ".")
     })
     .await
     .map_err(|e| e.to_string())?
 }
+
+/// Whether an ssh error means the server cannot be reached or trusted at all —
+/// as opposed to "a login is still pending", which waiting can fix.
+fn is_unreachable(error: &str) -> bool {
+    let e = error.to_lowercase();
+    [
+        "could not resolve", "connection refused", "timed out", "no route to host",
+        "network is unreachable", "host is down", "host key verification failed",
+        "remote host identification has changed",
+    ]
+    .iter()
+    .any(|needle| e.contains(needle))
+}
+
+/// How long the file pane waits for someone to finish logging in in the
+/// terminal. Generous: the cost of waiting is a local socket poll once a
+/// second, and the alternative was giving up on a person still typing.
+const MASTER_WAIT: Duration = Duration::from_secs(15 * 60);
 
 #[tauri::command]
 async fn sftp_list(
@@ -595,6 +683,12 @@ fn sftp_prune(sftp: tauri::State<'_, SharedSftp>, keep: Vec<String>) {
     sftp.prune(&keep);
 }
 
+/// The file pane went away: stop waiting for a terminal login on its behalf.
+#[tauri::command]
+fn sftp_cancel_wait(sftp: tauri::State<'_, SharedSftp>, host_id: String) {
+    sftp.cancel_wait(&host_id);
+}
+
 #[tauri::command]
 fn sftp_disconnect(sftp: tauri::State<'_, SharedSftp>, host_id: String) {
     sftp.disconnect(&host_id);
@@ -626,6 +720,9 @@ async fn vnc_prepare(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // ssh started this executable to ask for a saved password (Windows file
+    // pane): answer and exit before anything of the app exists.
+    askpass::run_if_helper();
     let registry: SharedRegistry = Arc::new(PtyRegistry::default());
     let sftp: SharedSftp = Arc::new(SftpRegistry::default());
     let vnc: SharedVnc = Arc::new(VncBridge::default());
@@ -680,6 +777,7 @@ pub fn run() {
             sftp_upload,
             sftp_upload_to,
             sftp_disconnect,
+            sftp_cancel_wait,
             sftp_prune,
             vnc_prepare,
             save_host,
@@ -842,4 +940,31 @@ fn set_window_theme(window: tauri::Window, theme: Option<String>) -> Result<(), 
         _ => None,
     };
     window.set_theme(theme).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod connect_tests {
+    use super::is_unreachable;
+
+    #[test]
+    fn network_failures_are_reported_at_once_and_login_failures_are_waited_out() {
+        for fatal in [
+            "ssh: connect to host 10.0.0.1 port 22: Connection refused",
+            "ssh: connect to host x port 22: Operation timed out",
+            "ssh: Could not resolve hostname nope.example: nodename nor servname provided",
+            "ssh: connect to host x port 22: No route to host",
+            "Host key verification failed.",
+            "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!",
+        ] {
+            assert!(is_unreachable(fatal), "should fail fast: {fatal}");
+        }
+        for pending in [
+            "failed to fill whole buffer — ssh said: root@h: Permission denied (publickey,password).",
+            "failed to fill whole buffer — ssh said: Enter passphrase for key: ",
+            "failed to fill whole buffer",
+            "Connection closed by 203.0.113.9 port 22",
+        ] {
+            assert!(!is_unreachable(pending), "should keep waiting: {pending}");
+        }
+    }
 }

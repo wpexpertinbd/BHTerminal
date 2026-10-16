@@ -76,7 +76,7 @@ fn multiplexing_is_requested_only_where_the_platform_has_it() {
         // fail outright, so the options must be absent entirely.
         assert!(!args.iter().any(|a| a.starts_with("ControlPath=")));
         assert!(!args.iter().any(|a| a == "ControlMaster=auto"));
-        assert!(ssh::build_exit_master(&host(), &cm).unwrap().is_none());
+        assert!(ssh::build_exit_master(&host(), None, &cm).unwrap().is_none());
     }
 }
 
@@ -242,4 +242,111 @@ fn exec_refuses_an_option_shaped_hostname() {
         ssh::build_exec(&h, None, None, "true"),
         Err(SshSafetyError::UnsafeHostname(_))
     ));
+}
+
+// ── asking about, and living without, the shared connection ────────────────
+
+/// The master check must name the SAME socket the terminal opened. The port
+/// is part of ssh's `%C` hash, so leaving it out makes a check (or an exit)
+/// for a non-default port look for a connection that was never there.
+#[test]
+fn master_check_and_exit_carry_the_port_the_terminal_used() {
+    if !ssh::multiplexing_supported() {
+        return;
+    }
+    let cm = ControlMaster { socket_dir: Path::new("/tmp/cm") };
+    let mut h = host();
+    h.port = 2279;
+    for (op, args) in [
+        ("check", ssh::build_check_master(&h, None, &cm).unwrap().unwrap()),
+        ("exit", ssh::build_exit_master(&h, None, &cm).unwrap().unwrap()),
+    ] {
+        assert!(pair(&args, "-p", "2279"), "{op} must pass the port: {args:?}");
+        assert!(pair(&args, "-O", op), "{op}: {args:?}");
+        assert!(pair(&args, "-o", "ControlPath=/tmp/cm/%C"));
+        assert_eq!(&args[args.len() - 2..], &["--".to_string(), "root@example.com".into()]);
+    }
+    // And the terminal's own path really is the one they name.
+    let terminal = ssh::build_terminal(&h, None, Some(&cm)).unwrap();
+    assert!(pair(&terminal, "-p", "2279") && pair(&terminal, "-o", "ControlPath=/tmp/cm/%C"));
+    // Default port: no -p at all, exactly like the terminal.
+    let plain = ssh::build_check_master(&host(), None, &cm).unwrap().unwrap();
+    assert!(!plain.iter().any(|a| a == "-p"));
+}
+
+#[test]
+fn master_check_is_refused_for_an_option_shaped_host_and_absent_without_multiplexing() {
+    let cm = ControlMaster { socket_dir: Path::new("/tmp/cm") };
+    let mut bad = host();
+    bad.hostname = "-oProxyCommand=evil".into();
+    assert!(matches!(ssh::build_check_master(&bad, None, &cm), Err(SshSafetyError::UnsafeHostname(_))));
+    if !ssh::multiplexing_supported() {
+        assert_eq!(ssh::build_check_master(&host(), None, &cm).unwrap(), None);
+    }
+}
+
+/// Windows has no connection sharing, so the file pane logs in on its own with
+/// the saved password — through askpass, which BatchMode would forbid, and
+/// without ever retrying a wrong password.
+#[test]
+fn a_password_sftp_login_allows_askpass_and_offers_one_attempt_of_one_kind() {
+    let args = ssh::build_sftp_password(&host(), None).unwrap();
+    assert!(pair(&args, "-o", "BatchMode=no"), "{args:?}");
+    assert!(!args.iter().any(|a| a == "BatchMode=yes"), "{args:?}");
+    assert!(pair(&args, "-o", "NumberOfPasswordPrompts=1"));
+    assert!(pair(&args, "-o", "PubkeyAuthentication=no"));
+    assert!(pair(&args, "-o", "PreferredAuthentications=password,keyboard-interactive"));
+    // Same shape as the normal SFTP argv: the subsystem, "--", then the target.
+    assert_eq!(
+        &args[args.len() - 4..],
+        &["-s".to_string(), "--".into(), "root@example.com".into(), "sftp".into()]
+    );
+    // It never opens a master of its own.
+    assert!(!args.iter().any(|a| a.contains("ControlMaster")));
+    // Keepalives still apply.
+    assert!(pair(&args, "-o", "ServerAliveInterval=15"));
+}
+
+#[test]
+fn a_password_sftp_login_refuses_option_shaped_values() {
+    let mut bad = host();
+    bad.username = "-oProxyCommand=evil".into();
+    assert!(ssh::build_sftp_password(&bad, None).is_err());
+    let mut jump = host();
+    jump.hostname = "-oProxyCommand=evil".into();
+    assert!(ssh::build_sftp_password(&host(), Some(&jump)).is_err());
+}
+
+/// ssh hashes `%l%h%p%r%j` into the control path. The check must feed it the
+/// SAME port and jump host as the terminal, or it asks about a socket that
+/// does not exist (verified against OpenSSH's `ssh -G`: dropping `-J` changes
+/// the path). This is the regression a jump host exposed.
+#[test]
+fn master_check_names_the_same_socket_as_the_terminal_even_through_a_jump_host() {
+    if !ssh::multiplexing_supported() {
+        return;
+    }
+    let cm = ControlMaster { socket_dir: Path::new("/tmp/cm") };
+    let mut target = host();
+    target.port = 2279;
+    let mut jump = Host::new("Jump", "198.51.100.1", "jumpuser");
+    jump.port = 2222;
+    let value_of = |args: &[String], flag: &str| {
+        args.windows(2).find(|w| w[0] == flag).map(|w| w[1].clone())
+    };
+    for with_jump in [None, Some(&jump)] {
+        let terminal = ssh::build_terminal(&target, with_jump, Some(&cm)).unwrap();
+        for (op, check) in [
+            ("check", ssh::build_check_master(&target, with_jump, &cm).unwrap().unwrap()),
+            ("exit", ssh::build_exit_master(&target, with_jump, &cm).unwrap().unwrap()),
+        ] {
+            for flag in ["-p", "-J"] {
+                assert_eq!(value_of(&terminal, flag), value_of(&check, flag), "{op} {flag}: {check:?}");
+            }
+            assert!(check.iter().any(|a| a == "ControlPath=/tmp/cm/%C"));
+        }
+    }
+    // The jump actually appears when there is one.
+    let with = ssh::build_check_master(&target, Some(&jump), &cm).unwrap().unwrap();
+    assert_eq!(value_of(&with, "-J"), Some("jumpuser@198.51.100.1:2222".to_string()));
 }

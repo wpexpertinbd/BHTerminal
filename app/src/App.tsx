@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { save as saveFile } from "@tauri-apps/plugin-dialog";
-import { api, blankHost, newId, type Host, type HostFolder, type Workspace } from "./api";
+import { api, authKind, blankHost, newId, type Host, type HostFolder, type Workspace } from "./api";
 import { AskModal } from "./AskModal";
 import { HostEditor } from "./HostEditor";
 import { TransferSheet } from "./TransferSheet";
@@ -190,6 +190,12 @@ export default function App() {
       const id = paneIds.get(pane.key);
       if (id) api.write(id, data).catch((e) => setError(String(e)));
     }
+  }
+
+  /** How a host logs in, for the file pane's wording. */
+  function authKindOf(hostId: string) {
+    const h = workspace?.store.hosts.find((x) => x.id === hostId);
+    return h ? authKind(h.authMethod) : undefined;
   }
 
   function toggleBroadcast() {
@@ -800,6 +806,8 @@ export default function App() {
             terminalCwd={cwdByHost[active.hostId] ?? null}
             follow={followTerminal}
             onFollowChange={setFollowTerminal}
+            authKind={authKindOf(active.hostId)}
+            sharesLogin={workspace?.multiplexing ?? true}
           />
         )}
 

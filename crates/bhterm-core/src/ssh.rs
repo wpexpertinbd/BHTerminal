@@ -229,6 +229,18 @@ pub fn build_tunnel(
     Ok(args)
 }
 
+/// `-p <port>` when the port is not 22. ⚠️ The port is part of the control
+/// path's `%C` hash, so anything that names an existing master MUST pass the
+/// same port the terminal connected with — otherwise it hashes to a different
+/// socket and quietly talks about a connection that does not exist.
+fn port_args(host: &Host) -> Vec<String> {
+    if host.port != 22 {
+        vec!["-p".into(), host.port.to_string()]
+    } else {
+        Vec::new()
+    }
+}
+
 /// Force-closes the shared connection so the next connect builds a new one.
 ///
 /// A user-initiated reconnect must not reuse the existing master: after a
@@ -237,21 +249,77 @@ pub fn build_tunnel(
 /// "reconnect" otherwise does nothing until the app is restarted.
 pub fn build_exit_master(
     host: &Host,
+    jump: Option<&Host>,
     cm: &ControlMaster,
 ) -> Result<Option<Vec<String>>, SshSafetyError> {
-    validate(host, None)?;
+    build_master_control(host, jump, cm, "exit")
+}
+
+/// Asks whether the terminal's shared connection is up. Talks only to the
+/// local control socket — no network, nothing for a server to log — so it can
+/// be polled every second while someone types a password.
+pub fn build_check_master(
+    host: &Host,
+    jump: Option<&Host>,
+    cm: &ControlMaster,
+) -> Result<Option<Vec<String>>, SshSafetyError> {
+    build_master_control(host, jump, cm, "check")
+}
+
+/// ⚠️ Everything that goes into the control path's `%C` hash must match what
+/// the terminal connected with: the port (`-p`) AND the jump host (`-J`).
+/// ssh hashes `%l%h%p%r%j`, so a check that leaves out the jump names a
+/// different socket and reports "no connection" for one that is up — which
+/// made a password host behind a jump host wait for a login that had already
+/// happened. Both come from the same helpers the terminal uses.
+fn build_master_control(
+    host: &Host,
+    jump: Option<&Host>,
+    cm: &ControlMaster,
+    operation: &str,
+) -> Result<Option<Vec<String>>, SshSafetyError> {
+    validate(host, jump)?;
     if !multiplexing_supported() {
         return Ok(None);
     }
     let path = cm.socket_dir.join("%C");
-    Ok(Some(vec![
-        "-o".into(),
-        format!("ControlPath={}", path.display()),
-        "-O".into(),
-        "exit".into(),
-        "--".into(),
-        destination(host),
-    ]))
+    let mut args = vec!["-o".to_string(), format!("ControlPath={}", path.display())];
+    args.extend(port_args(host));
+    if let Some(j) = jump {
+        args.push("-J".into());
+        args.push(jump_spec(j));
+    }
+    args.extend(["-O".into(), operation.into(), "--".into(), destination(host)]);
+    Ok(Some(args))
+}
+
+/// argv for an SFTP channel that has to log in BY ITSELF with a saved
+/// password — Windows, where OpenSSH has no connection sharing.
+///
+/// `BatchMode` is deliberately off: it forbids the askpass helper that
+/// delivers the password. One password prompt only, so a wrong saved password
+/// costs the server one failed attempt, not three; and only password methods
+/// are offered, so no key is tried and counted against the server's limit.
+pub fn build_sftp_password(
+    host: &Host,
+    jump: Option<&Host>,
+) -> Result<Vec<String>, SshSafetyError> {
+    validate(host, jump)?;
+    let mut args = shared_options(host, jump);
+    for option in [
+        "BatchMode=no",
+        "NumberOfPasswordPrompts=1",
+        "PreferredAuthentications=password,keyboard-interactive",
+        "PubkeyAuthentication=no",
+    ] {
+        args.push("-o".into());
+        args.push(option.into());
+    }
+    args.push("-s".into());
+    args.push("--".into());
+    args.push(destination(host));
+    args.push("sftp".into());
+    Ok(args)
 }
 
 /// Resolve a jump host out of a host list, for callers holding a flat store.
