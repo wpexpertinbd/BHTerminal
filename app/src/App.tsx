@@ -138,8 +138,11 @@ export default function App() {
 
   const hostsByFolder = useMemo(() => {
     const map = new Map<string | null, Host[]>();
+    const folderIds = new Set((workspace?.store.folders ?? []).map((f) => f.id));
     for (const h of workspace?.store.hosts ?? []) {
-      const k = h.folderID ?? null;
+      // A host filed in a folder that no longer exists is shown at the top
+      // level rather than vanishing from the list.
+      const k = h.folderID && folderIds.has(h.folderID) ? h.folderID : null;
       if (!map.has(k)) map.set(k, []);
       map.get(k)!.push(h);
     }
@@ -147,13 +150,60 @@ export default function App() {
     return map;
   }, [workspace]);
 
-  const rootFolders = useMemo(
-    () =>
-      (workspace?.store.folders ?? [])
-        .filter((f) => !f.parentFolderID)
-        .sort((a, b) => a.sortOrder - b.sortOrder),
-    [workspace]
-  );
+  // The folder tree. Sub-folders are drawn inside their parent at any depth.
+  // A folder whose parent is missing, or that sits in a loop never reachable
+  // from the top, is drawn at the top level instead — a folder (and the
+  // hosts in it) must never simply disappear from the list.
+  const { rootFolders, childFolders } = useMemo(() => {
+    const folders = workspace?.store.folders ?? [];
+    const ids = new Set(folders.map((f) => f.id));
+    const children = new Map<string, HostFolder[]>();
+    const tops: HostFolder[] = [];
+    for (const f of folders) {
+      if (f.parentFolderID && ids.has(f.parentFolderID) && f.parentFolderID !== f.id) {
+        if (!children.has(f.parentFolderID)) children.set(f.parentFolderID, []);
+        children.get(f.parentFolderID)!.push(f);
+      } else {
+        tops.push(f);
+      }
+    }
+    // Anything in a parent loop is unreachable from the top: promote it.
+    const reached = new Set<string>();
+    const walk = (f: HostFolder) => {
+      if (reached.has(f.id)) return;
+      reached.add(f.id);
+      for (const c of children.get(f.id) ?? []) walk(c);
+    };
+    tops.forEach(walk);
+    for (const f of folders) {
+      if (!reached.has(f.id)) {
+        tops.push(f);
+        walk(f);
+      }
+    }
+    const bySort = (a: HostFolder, b: HostFolder) => a.sortOrder - b.sortOrder;
+    tops.sort(bySort);
+    for (const list of children.values()) list.sort(bySort);
+    return { rootFolders: tops, childFolders: children };
+  }, [workspace]);
+
+  /** Every host and sub-folder under a folder, however deep. */
+  function contentsOf(folderId: string): { hosts: number; folders: number } {
+    let hosts = 0;
+    let folders = 0;
+    const seen = new Set<string>();
+    const visit = (id: string) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      hosts += (hostsByFolder.get(id) ?? []).length;
+      for (const c of childFolders.get(id) ?? []) {
+        folders += 1;
+        visit(c.id);
+      }
+    };
+    visit(folderId);
+    return { hosts, folders };
+  }
 
   // ── host search ──────────────────────────────────────────────────────────
   // A flat, ranked list across EVERY folder replaces the tree while there is
@@ -338,7 +388,22 @@ export default function App() {
         : [...w.store.hosts, saved];
       return { ...w, store: { ...w.store, hosts } };
     });
-    if (saved.folderID) setExpanded((e) => new Set(e).add(saved.folderID!));
+    // Open the folder it was saved into AND every folder above it, so a host
+    // filed three levels deep is actually visible afterwards.
+    if (saved.folderID) {
+      const byId = new Map((workspace?.store.folders ?? []).map((f) => [f.id, f]));
+      setExpanded((e) => {
+        const next = new Set(e);
+        const seen = new Set<string>(); // a parent loop must not spin forever
+        let id: string | null = saved.folderID;
+        while (id && byId.has(id) && !seen.has(id)) {
+          seen.add(id);
+          next.add(id);
+          id = byId.get(id)!.parentFolderID;
+        }
+        return next;
+      });
+    }
     setSelected(saved.id);
   }
 
@@ -394,12 +459,24 @@ export default function App() {
   }
 
   function removeFolder(f: HostFolder) {
-    const inside = (hostsByFolder.get(f.id) ?? []).length;
+    // ⚠️ The delete cascades through every sub-folder on the Rust side, so the
+    // warning must count everything underneath — counting only the hosts
+    // directly inside said "The folder is empty." over sub-folders full of
+    // hosts that were about to go, saved passwords and all.
+    const { hosts: inside, folders: subfolders } = contentsOf(f.id);
+    const within =
+      subfolders > 0 ? ` (including ${subfolders} sub-folder${subfolders === 1 ? "" : "s"})` : "";
     setAsk({
       title: `Delete “${f.name}”?`,
       detail: inside
-        ? `The ${inside} host${inside === 1 ? "" : "s"} inside it go too, with their saved passwords.`
-        : "The folder is empty.",
+        ? inside === 1
+          ? `The 1 host inside it${within} goes too, with its saved password.`
+          : `The ${inside} hosts inside it${within} go too, with their saved passwords.`
+        : subfolders > 0
+          ? subfolders === 1
+            ? "Its empty sub-folder goes too."
+            : `Its ${subfolders} empty sub-folders go too.`
+          : "The folder is empty.",
       confirmLabel: "Delete",
       danger: true,
       onSubmit: async () => {
@@ -520,15 +597,19 @@ export default function App() {
     );
   }
 
-  function renderFolder(f: HostFolder) {
+  function renderFolder(f: HostFolder, drawn: Set<string> = new Set()): React.ReactNode {
+    // `drawn` guards against a folder appearing twice down one branch.
+    if (drawn.has(f.id)) return null;
+    const path = new Set(drawn).add(f.id);
     const open = expanded.has(f.id);
     const children = hostsByFolder.get(f.id) ?? [];
+    const subfolders = childFolders.get(f.id) ?? [];
     return (
       <div key={f.id}>
         <div className="row folder" onClick={() => toggleFolder(f.id)}>
           <span className="twisty">{open ? "▾" : "▸"}</span>
           <span>{f.name}</span>
-          <span className="count">{children.length}</span>
+          <span className="count">{contentsOf(f.id).hosts}</span>
           <span className="row-actions">
             <button
               title="New host in this folder"
@@ -550,7 +631,12 @@ export default function App() {
             </button>
           </span>
         </div>
-        {open && <div className="children">{children.map((h) => renderHost(h))}</div>}
+        {open && (
+          <div className="children">
+            {subfolders.map((sf) => renderFolder(sf, path))}
+            {children.map((h) => renderHost(h))}
+          </div>
+        )}
       </div>
     );
   }
@@ -730,7 +816,7 @@ export default function App() {
             )
           ) : (
             <>
-              {rootFolders.map(renderFolder)}
+              {rootFolders.map((f) => renderFolder(f))}
               {(hostsByFolder.get(null) ?? []).map((h) => renderHost(h))}
             </>
           )}

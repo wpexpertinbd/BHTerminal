@@ -115,6 +115,11 @@ impl SessionStore {
 
     /// Cascades into subfolders and their hosts, returning every secret
     /// account freed by the deletion.
+    ///
+    /// ⚠️ Each folder is taken once. Folders whose parents form a loop (or a
+    /// folder that is its own parent — possible in an imported or hand-edited
+    /// file) made the old walk append the same children forever: deleting
+    /// such a folder hung the app.
     pub fn delete_folder(&mut self, id: Uuid) -> Vec<String> {
         let mut doomed_folders = vec![id];
         let mut i = 0;
@@ -125,6 +130,7 @@ impl SessionStore {
                 .iter()
                 .filter(|f| f.parent_folder_id == Some(parent))
                 .map(|f| f.id)
+                .filter(|c| !doomed_folders.contains(c))
                 .collect();
             doomed_folders.extend(children);
             i += 1;
