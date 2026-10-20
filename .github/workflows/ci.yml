@@ -31,10 +31,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22: runs the TypeScript unit tests directly (type stripping), with
+          # no test framework to install.
+          node-version: 22
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci
         working-directory: app
       - run: npx tsc --noEmit
+        working-directory: app
+      - name: Frontend unit tests
+        run: node --test src/*.test.ts
         working-directory: app

@@ -264,6 +264,7 @@ export function TerminalPane({
   return (
     <div
       className="term-wrap"
+      data-pane-key={paneKey}
       style={{ display: visible ? "block" : "none" }}
       onContextMenu={openMenu}
     >

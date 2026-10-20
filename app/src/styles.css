@@ -642,3 +642,29 @@ body.resizing * { cursor: col-resize !important; }
   border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text);
 }
 /* END BHTERM-FILES-RETRY */
+
+/* BHTERM-HOST-SEARCH */
+.host-search { position: relative; padding: 8px 10px 4px; min-width: 0; }
+.host-search input {
+  width: 100%; box-sizing: border-box; min-width: 0;
+  font: inherit; font-size: 12.5px; padding: 6px 26px 6px 9px;
+  border: 1px solid var(--line); border-radius: 7px;
+  background: var(--surface); color: var(--text);
+}
+.host-search input::placeholder { color: var(--muted); }
+.host-search input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(13,110,253,.18); }
+.host-search .clear {
+  position: absolute; right: 15px; top: 50%; transform: translateY(-35%);
+  width: 20px; height: 20px; border: 0; border-radius: 50%; padding: 0;
+  background: var(--surface-2); color: var(--muted); cursor: pointer; font-size: 13px; line-height: 20px;
+}
+.host-search .clear:hover { color: var(--text); }
+.search-hint { font-size: 11px; color: var(--muted); padding: 2px 14px 6px; }
+.row.host.active:not(.selected) { background: var(--hover); box-shadow: inset 3px 0 0 var(--accent); }
+.host-text mark { background: rgba(255, 196, 0, .45); color: inherit; border-radius: 2px; padding: 0 1px; }
+.row.host.selected .host-text mark { background: rgba(255,255,255,.35); }
+.host-folder {
+  font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.row.host.selected .host-folder { color: rgba(255,255,255,.75); }
+/* END BHTERM-HOST-SEARCH */

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { save as saveFile } from "@tauri-apps/plugin-dialog";
 import { api, authKind, blankHost, newId, type Host, type HostFolder, type Workspace } from "./api";
 import { AskModal } from "./AskModal";
@@ -8,6 +8,27 @@ import { useUpdateCheck } from "./useUpdateCheck";
 import { useResizablePanes } from "./useResizablePanes";
 import { loadFont, loadTheme, resolvedMode, saveFont, watchSystemMode, type TerminalFont, type ThemeChoice } from "./theme";
 import { AppearanceSheet } from "./AppearanceSheet";
+import { addressOf, searchHosts, type Hits, type HostMatch } from "./hostSearch";
+
+/** ⌘F on the Mac. Elsewhere Ctrl+Shift+F, because a bare Ctrl+F belongs to
+ *  the terminal (readline's "forward one character", and vim's page-down). */
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const SEARCH_KEY = IS_MAC ? "⌘F" : "Ctrl+Shift+F";
+
+/** `text` with the ranges in `hits` wrapped in <mark>. React text nodes only,
+ *  so a host name can never inject markup. */
+function Marked({ text, hits }: { text: string; hits?: Hits }) {
+  if (!hits || hits.length === 0) return <>{text}</>;
+  const parts: React.ReactNode[] = [];
+  let at = 0;
+  hits.forEach(([s, e], i) => {
+    if (s > at) parts.push(text.slice(at, s));
+    parts.push(<mark key={i}>{text.slice(s, e)}</mark>);
+    at = e;
+  });
+  if (at < text.length) parts.push(text.slice(at));
+  return <>{parts}</>;
+}
 import { MasterPasswordSheet } from "./MasterPassword";
 import { SnippetBar } from "./SnippetBar";
 import { TunnelBar } from "./TunnelBar";
@@ -133,6 +154,94 @@ export default function App() {
         .sort((a, b) => a.sortOrder - b.sortOrder),
     [workspace]
   );
+
+  // ── host search ──────────────────────────────────────────────────────────
+  // A flat, ranked list across EVERY folder replaces the tree while there is
+  // a query; the tree's own open/closed state is left exactly as it was.
+  const [query, setQuery] = useState("");
+  const [cursor, setCursor] = useState(0);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const matches = useMemo(
+    () => (workspace ? searchHosts(query, workspace.store.hosts, workspace.store.folders) : []),
+    [query, workspace]
+  );
+  const searching = query.trim().length > 0;
+  // The keyboard choice, kept inside the list even when the list shrinks under
+  // it (a host deleted or edited mid-search) — otherwise Enter has nothing.
+  const chosen = matches.length === 0 ? -1 : Math.min(cursor, matches.length - 1);
+
+  // Keep the keyboard choice on screen as it moves through a long list.
+  useEffect(() => {
+    document.querySelector(".tree .row.host.active")?.scrollIntoView({ block: "nearest" });
+  }, [cursor, query]);
+
+  // ⌘F / Ctrl+Shift+F from anywhere, including from inside a terminal.
+  // Capture phase, so the terminal never sees the keystroke as typing.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const wanted = IS_MAC
+        ? e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "f"
+        : e.ctrlKey && e.shiftKey && !e.altKey && e.key.toLowerCase() === "f";
+      if (!wanted) return;
+      // A dialog or the lock screen owns the keyboard: leave the keystroke
+      // alone rather than pull focus to a box behind it.
+      if (document.querySelector(".modal-backdrop, .lock-screen")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const focusBox = () => {
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      };
+      // Straight away when the box is on screen, so the very next keystroke
+      // lands in it; a collapsed sidebar has to render the box first.
+      if (collapsed.sidebar) {
+        toggleCollapsed("sidebar");
+        setTimeout(focusBox, 0);
+      } else {
+        focusBox();
+      }
+    }
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [collapsed.sidebar, toggleCollapsed]);
+
+  function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setCursor(Math.min(chosen + 1, Math.max(matches.length - 1, 0)));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setCursor(Math.max(chosen - 1, 0));
+    } else if (e.key === "Enter") {
+      const pick = chosen >= 0 ? matches[chosen] : undefined;
+      if (!pick) return;
+      e.preventDefault();
+      setSelected(pick.host.id);
+      setQuery("");
+      setCursor(0);
+      // Typing must go to the session, not back into this box. A host that is
+      // already open is only brought forward, and its terminal's own focus
+      // effect does not run when nothing about it changed — so hand it focus.
+      searchRef.current?.blur();
+      const open = allPanes.find((p) => p.hostId === pick.host.id && !p.exited);
+      connect(pick.host);
+      if (open) {
+        requestAnimationFrame(() =>
+          document
+            .querySelector<HTMLElement>(`.term-wrap[data-pane-key="${open.key}"] .xterm-helper-textarea`)
+            ?.focus()
+        );
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      if (query) {
+        setQuery("");
+        setCursor(0);
+      } else {
+        searchRef.current?.blur();
+      }
+    }
+  }
 
   function connect(host: Host) {
     // Reuse an open pane for the same host rather than stacking duplicates —
@@ -360,24 +469,32 @@ export default function App() {
     });
   }
 
-  function renderHost(h: Host) {
+  /** One host row. In search results it also carries what matched (for
+   *  highlighting), where the host is filed, and the keyboard choice. */
+  function renderHost(h: Host, hit?: HostMatch, index?: number) {
     const live = allPanes.some((p) => p.hostId === h.id && !p.exited);
+    const active = index !== undefined && index === chosen;
     return (
       <div
         key={h.id}
-        className={`row host ${selected === h.id ? "selected" : ""}`}
-        onClick={() => setSelected(h.id)}
+        className={`row host ${selected === h.id ? "selected" : ""} ${active ? "active" : ""}`}
+        onClick={() => {
+          setSelected(h.id);
+          // In search results a click also moves the Enter target.
+          if (index !== undefined) setCursor(index);
+        }}
         onDoubleClick={() => connect(h)}
         title={`${h.username}@${h.hostname}:${h.port}`}
       >
         <span className={`dot ${live ? "live" : ""}`} />
         <span className="host-text">
-          <span className="host-name">{h.name}</span>
-          <span className="host-sub">
-            {h.connectionType === "vnc"
-              ? `VNC ${h.hostname}:${h.port}`
-              : `${h.username}@${h.hostname}:${h.port}`}
+          <span className="host-name">
+            <Marked text={h.name} hits={hit?.nameHits} />
           </span>
+          <span className="host-sub">
+            <Marked text={addressOf(h)} hits={hit?.addressHits} />
+          </span>
+          {hit && hit.folderPath && <span className="host-folder">{hit.folderPath}</span>}
         </span>
         <span className="row-actions">
           <button
@@ -433,7 +550,7 @@ export default function App() {
             </button>
           </span>
         </div>
-        {open && <div className="children">{children.map(renderHost)}</div>}
+        {open && <div className="children">{children.map((h) => renderHost(h))}</div>}
       </div>
     );
   }
@@ -565,10 +682,58 @@ export default function App() {
             )}
           </div>
         </div>
+        {workspace && workspace.store.hosts.length > 0 && (
+          <div className="host-search">
+            <input
+              ref={searchRef}
+              type="text"
+              value={query}
+              placeholder={`Search name, IP or user  ${SEARCH_KEY}`}
+              aria-label="Search hosts"
+              autoComplete="off"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setCursor(0);
+              }}
+              onKeyDown={onSearchKey}
+            />
+            {query && (
+              <button
+                className="clear"
+                title="Clear (Esc)"
+                onClick={() => {
+                  setQuery("");
+                  setCursor(0);
+                  searchRef.current?.focus();
+                }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        )}
         <div className="tree">
           {error && <div className="error">{error}</div>}
-          {rootFolders.map(renderFolder)}
-          {(hostsByFolder.get(null) ?? []).map(renderHost)}
+          {searching ? (
+            matches.length > 0 ? (
+              <>
+                <div className="search-hint">
+                  {matches.length} found · ↑↓ to choose · Enter to connect
+                </div>
+                {matches.map((m, i) => renderHost(m.host, m, i))}
+              </>
+            ) : (
+              <div className="empty">No host matches “{query.trim()}”.</div>
+            )
+          ) : (
+            <>
+              {rootFolders.map(renderFolder)}
+              {(hostsByFolder.get(null) ?? []).map((h) => renderHost(h))}
+            </>
+          )}
           {workspace && workspace.store.hosts.length === 0 && (
             <div className="empty">
               No saved hosts yet.
