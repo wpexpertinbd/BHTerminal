@@ -9,6 +9,7 @@ import { useResizablePanes } from "./useResizablePanes";
 import { loadFont, loadTheme, resolvedMode, saveFont, watchSystemMode, type TerminalFont, type ThemeChoice } from "./theme";
 import { AppearanceSheet } from "./AppearanceSheet";
 import { addressOf, searchHosts, type Hits, type HostMatch } from "./hostSearch";
+import type { HostKeyChange } from "./hostKey";
 
 /** ⌘F on the Mac. Elsewhere Ctrl+Shift+F, because a bare Ctrl+F belongs to
  *  the terminal (readline's "forward one character", and vim's page-down). */
@@ -44,6 +45,9 @@ interface Pane {
   /** Set when ssh exits unexpectedly: the tab stays so it can be reconnected,
    *  rather than vanishing and taking the error message with it. */
   exited: boolean;
+  /** ssh refused because the server's key no longer matches the saved one
+   *  (typically: the server was reinstalled). The banner offers to trust it. */
+  hostKey?: HostKeyChange | null;
 }
 
 /** A tab holds one or more panes. Splitting a tab adds a pane to it rather
@@ -494,6 +498,50 @@ export default function App() {
   }
 
   const paneIds = useMemo(() => new Map<string, string>(), []);
+
+  /** Starts an exited pane's host again in the same place: a fresh pane key
+   *  mounts a fresh terminal, which opens a new session. */
+  function restartPane(paneKey: string) {
+    const id = paneIds.get(paneKey);
+    if (id) api.close(id);
+    paneIds.delete(paneKey);
+    setTabs((prev) =>
+      prev.map((t) => {
+        const old = t.panes.find((p) => p.key === paneKey);
+        if (!old) return t;
+        const name = workspace?.store.hosts.find((h) => h.id === old.hostId)?.name ?? old.title;
+        const fresh = newPane(old.kind, old.hostId, name);
+        return {
+          ...t,
+          panes: t.panes.map((p) => (p.key === paneKey ? fresh : p)),
+          focused: t.focused === paneKey ? fresh.key : t.focused,
+        };
+      })
+    );
+  }
+
+  /** "Trust the new key": forget the old one, then connect again — ssh then
+   *  shows the new fingerprint and asks yes/no, as for any new server. */
+  // Per pane: two tabs trusting at once must not clear each other's state.
+  const [trustState, setTrustState] = useState<Record<string, { busy: boolean; error: string | null }>>({});
+  async function trustNewKey(pane: Pane) {
+    if (!pane.hostId || !pane.hostKey || trustState[pane.key]?.busy) return;
+    const set = (v: { busy: boolean; error: string | null } | null) =>
+      setTrustState((m) => {
+        const next = { ...m };
+        if (v) next[pane.key] = v;
+        else delete next[pane.key];
+        return next;
+      });
+    set({ busy: true, error: null });
+    try {
+      await api.forgetHostKey(pane.hostId, pane.hostKey.reported);
+      set(null);
+      restartPane(pane.key);
+    } catch (e) {
+      set({ busy: false, error: String(e) });
+    }
+  }
 
   /** Ends one pane's session. Closing the last pane of a tab closes the tab —
    *  an empty tab is not a thing anyone wants to look at. */
@@ -1007,10 +1055,11 @@ export default function App() {
                       focused={t.key === activeTabKey && p.key === t.focused}
                       onReady={(id) => paneIds.set(p.key, id)}
                       onInput={sendInput}
-                      onExit={(key, code) =>
+                      onExit={(key, code, hostKey) =>
                         patchPane(key, (q) => ({
                           ...q,
                           exited: true,
+                          hostKey,
                           title: `${q.title} — exited${code !== null ? ` (${code})` : ""}`,
                         }))
                       }
@@ -1069,7 +1118,31 @@ export default function App() {
           </div>
         )}
 
-        {active?.exited && (
+        {active?.exited && active.hostKey && (
+          <div className="banner hostkey-banner">
+            <div className="hostkey-text">
+              <strong>This server's identity (host key) has changed.</strong> Expected if you reinstalled or
+              rebuilt it. If you didn't, someone may be intercepting the connection — don't trust it.
+              {active.hostKey.fingerprint && (
+                <div className="hostkey-fp">
+                  New key: <code>{active.hostKey.fingerprint}</code>
+                </div>
+              )}
+              {trustState[active.key]?.error && (
+                <div className="hostkey-error">{trustState[active.key].error}</div>
+              )}
+            </div>
+            <button
+              className="primary"
+              disabled={!!trustState[active.key]?.busy}
+              onClick={() => trustNewKey(active)}
+            >
+              Trust new key &amp; reconnect
+            </button>
+          </div>
+        )}
+
+        {active?.exited && !active.hostKey && (
           <div className="banner">
             Disconnected. Close the tab, or double-click the host to reconnect.
           </div>

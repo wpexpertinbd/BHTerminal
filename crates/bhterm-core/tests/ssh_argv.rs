@@ -350,3 +350,48 @@ fn master_check_names_the_same_socket_as_the_terminal_even_through_a_jump_host()
     let with = ssh::build_check_master(&target, Some(&jump), &cm).unwrap().unwrap();
     assert_eq!(value_of(&with, "-J"), Some("jumpuser@198.51.100.1:2222".to_string()));
 }
+
+
+#[test]
+fn known_hosts_names_a_server_the_way_ssh_does() {
+    let mut h = host();
+    assert_eq!(ssh::known_hosts_name(&h), "example.com");
+    h.port = 2279;
+    assert_eq!(ssh::known_hosts_name(&h), "[example.com]:2279");
+    let cfg = ssh::HostKeyConfig::default();
+    assert_eq!(ssh::host_key_name(&h, &cfg), "[example.com]:2279");
+    assert_eq!(
+        ssh::build_forget_host_key("[example.com]:2279", "/k/known_hosts"),
+        vec!["-R".to_string(), "[example.com]:2279".into(), "-f".into(), "/k/known_hosts".into()]
+    );
+}
+
+#[test]
+fn the_effective_config_comes_from_ssh_itself_and_honours_an_alias() {
+    // Captured from real `ssh -G` output.
+    let out = "hostname 203.0.113.7\nport 2279\nhostkeyalias myalias\n\
+               userknownhostsfile /Users/x/.ssh/known_hosts /Users/x/.ssh/known_hosts2\n";
+    let cfg = ssh::parse_effective_config(out);
+    assert_eq!(cfg.alias.as_deref(), Some("myalias"));
+    assert_eq!(cfg.files, vec!["/Users/x/.ssh/known_hosts", "/Users/x/.ssh/known_hosts2"]);
+    let mut h = Host::new("Web", "203.0.113.7", "root");
+    h.port = 2279;
+    assert_eq!(ssh::host_key_name(&h, &cfg), "myalias", "ssh files the key under the alias");
+    assert!(ssh::reported_is(&h, &cfg, "myalias"));
+    assert!(ssh::reported_is(&h, &cfg, "[203.0.113.7]:2279"));
+    assert!(!ssh::reported_is(&h, &cfg, "10.0.0.1"), "any other server is refused");
+    assert!(!ssh::reported_is(&h, &cfg, ""));
+    assert_eq!(ssh::parse_effective_config("hostname x\n").alias, None);
+}
+
+#[test]
+fn the_effective_config_query_never_connects_and_refuses_option_shaped_values() {
+    let mut h = host();
+    h.port = 2279;
+    assert_eq!(
+        ssh::build_effective_config(&h).unwrap(),
+        vec!["-G".to_string(), "-p".into(), "2279".into(), "--".into(), "root@example.com".into()]
+    );
+    let bad = Host::new("Bad", "-oProxyCommand=x", "root");
+    assert!(ssh::build_effective_config(&bad).is_err());
+}

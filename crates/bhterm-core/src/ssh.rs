@@ -322,6 +322,93 @@ pub fn build_sftp_password(
     Ok(args)
 }
 
+/// How ssh names a server in `known_hosts`: the bare address on port 22,
+/// `[address]:port` on any other port.
+pub fn known_hosts_name(host: &Host) -> String {
+    if host.port != 22 {
+        format!("[{}]:{}", host.hostname, host.port)
+    } else {
+        host.hostname.clone()
+    }
+}
+
+/// Where ssh keeps — and under what name it looks up — one server's key, as
+/// ssh itself works it out from the user's `~/.ssh/config` (`ssh -G`).
+///
+/// ⚠️ Without this, a config with `HostKeyAlias` or its own
+/// `UserKnownHostsFile` made "forget the old key" clean the default file
+/// under the default name, report success, and change nothing.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HostKeyConfig {
+    pub alias: Option<String>,
+    pub files: Vec<String>,
+}
+
+/// argv for `ssh -G`: prints the configuration ssh would use for this host,
+/// without connecting.
+pub fn build_effective_config(host: &Host) -> Result<Vec<String>, SshSafetyError> {
+    validate(host, None)?;
+    let mut args = vec!["-G".to_string()];
+    args.extend(port_args(host));
+    args.push("--".into());
+    args.push(destination(host));
+    Ok(args)
+}
+
+/// Reads `hostkeyalias` and `userknownhostsfile` out of `ssh -G` output.
+/// ssh prints the file list space-separated and unquoted, so a path with a
+/// space comes out split; the caller only uses files that exist, and says so
+/// when the key is in none of them rather than claiming success.
+pub fn parse_effective_config(out: &str) -> HostKeyConfig {
+    let mut cfg = HostKeyConfig::default();
+    for line in out.lines() {
+        let (key, value) = match line.split_once(' ') {
+            Some(kv) => kv,
+            None => continue,
+        };
+        match key.to_ascii_lowercase().as_str() {
+            "hostkeyalias" if !value.trim().is_empty() && value.trim() != "none" => {
+                cfg.alias = Some(value.trim().to_string());
+            }
+            "userknownhostsfile" => {
+                cfg.files = value.split_whitespace().map(str::to_string).collect();
+            }
+            _ => {}
+        }
+    }
+    cfg
+}
+
+/// The name ssh files this server's key under: its `HostKeyAlias` when the
+/// config sets one, otherwise `host` / `[host]:port`.
+pub fn host_key_name(host: &Host, cfg: &HostKeyConfig) -> String {
+    cfg.alias.clone().unwrap_or_else(|| known_hosts_name(host))
+}
+
+/// Whether ssh's `Host key for <reported> has changed` is about this server.
+/// The caller only ever asks about the session's own target and jump host,
+/// so text in a terminal can never point the app at some other server.
+pub fn reported_is(host: &Host, cfg: &HostKeyConfig, reported: &str) -> bool {
+    let reported = reported.trim().to_ascii_lowercase();
+    !reported.is_empty()
+        && [host.hostname.clone(), known_hosts_name(host), host_key_name(host, cfg)]
+            .iter()
+            .any(|n| n.to_ascii_lowercase() == reported)
+}
+
+/// argv for `ssh-keygen` to forget one server's saved key in one file, so the
+/// next connect asks to trust the key it presents now. ssh-keygen keeps the
+/// previous file as `<file>.old`, so this is undoable.
+pub fn build_forget_host_key(name: &str, file: &str) -> Vec<String> {
+    vec!["-R".into(), name.into(), "-f".into(), file.into()]
+}
+
+/// argv for `ssh-keygen` to ask whether `file` holds a key for `name`
+/// (exit 0 = yes).
+pub fn build_find_host_key(name: &str, file: &str) -> Vec<String> {
+    vec!["-F".into(), name.into(), "-f".into(), file.into()]
+}
+
 /// Resolve a jump host out of a host list, for callers holding a flat store.
 pub fn resolve_jump(hosts: &[Host], id: Option<Uuid>) -> Option<&Host> {
     id.and_then(|id| hosts.iter().find(|h| h.id == id))

@@ -93,6 +93,96 @@ fn open_terminal(
     Ok(pane_id)
 }
 
+/// After "REMOTE HOST IDENTIFICATION HAS CHANGED": forgets the saved key of
+/// the server ssh complained about, so the next connect asks to trust the key
+/// it presents now — what MobaXterm's "trust the new key?" does.
+///
+/// `reported` is the name from ssh's own warning. It is only used to choose
+/// between this host and its jump host; anything else is refused, so text in
+/// a terminal cannot make the app touch some other server's entry.
+///
+/// The name and the files come from `ssh -G` — ssh's own reading of the
+/// user's config — so a `HostKeyAlias` or a custom `UserKnownHostsFile` is
+/// honoured. Only files that actually hold the key are rewritten (by the
+/// system's `ssh-keygen -R`, which keeps `<file>.old`), each is re-checked
+/// afterwards, and if none held it the user is told so instead of being
+/// shown a success that changed nothing.
+#[tauri::command]
+async fn forget_host_key(host_id: String, reported: String) -> Result<String, String> {
+    let host_id: Uuid = host_id.parse().map_err(|_| "bad host id".to_string())?;
+    let store = SessionStore::load(&paths::sessions_file().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let host = store.host(host_id).ok_or("no such host")?.clone();
+    let jump = ssh::resolve_jump(&store.hosts, host.jump_host_id).cloned();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut owner = None;
+        for candidate in std::iter::once(&host).chain(jump.as_ref()) {
+            let cfg = effective_host_key_config(candidate)?;
+            if ssh::reported_is(candidate, &cfg, &reported) {
+                owner = Some((candidate.clone(), cfg));
+                break;
+            }
+        }
+        let (owner, cfg) = owner.ok_or_else(|| {
+            format!("“{reported}” is not this host or its jump host, so nothing was changed.")
+        })?;
+        let name = ssh::host_key_name(&owner, &cfg);
+
+        let keygen = |args: Vec<String>| {
+            proc::command("ssh-keygen")
+                .args(&args)
+                .output()
+                .map_err(|e| format!("Couldn't run ssh-keygen: {e}"))
+        };
+        let mut cleaned = Vec::new();
+        for file in cfg.files.iter().filter(|f| std::path::Path::new(f).is_file()) {
+            if !keygen(ssh::build_find_host_key(&name, file))?.status.success() {
+                continue; // no key for this server in that file
+            }
+            let out = keygen(ssh::build_forget_host_key(&name, file))?;
+            if !out.status.success() {
+                let said = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                return Err(format!("ssh-keygen couldn't remove the old key for {name} from {file}: {said}"));
+            }
+            // Check the effect, not the exit code.
+            if keygen(ssh::build_find_host_key(&name, file))?.status.success() {
+                return Err(format!("A key for {name} is still saved in {file} — remove it by hand."));
+            }
+            cleaned.push(file.clone());
+        }
+        if cleaned.is_empty() {
+            return Err(format!(
+                "No saved key for {name} was found in {} — nothing was changed. \
+                 If your ssh config keeps keys somewhere else, remove it there.",
+                cfg.files.join(", ")
+            ));
+        }
+        Ok(format!("{name} ({})", cleaned.join(", ")))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// ssh's own answer to "which name and files hold this server's key". If
+/// `ssh -G` can't run, fall back to ssh's defaults.
+fn effective_host_key_config(host: &bhterm_core::Host) -> Result<ssh::HostKeyConfig, String> {
+    let args = ssh::build_effective_config(host).map_err(|e| e.to_string())?;
+    let mut cfg = proc::command(ssh_program())
+        .args(&args)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| ssh::parse_effective_config(&String::from_utf8_lossy(&o.stdout)))
+        .unwrap_or_default();
+    if cfg.files.is_empty() {
+        cfg.files = vec![ssh::expand_tilde("~/.ssh/known_hosts")];
+    }
+    cfg.files = cfg.files.iter().map(|f| ssh::expand_tilde(f)).collect();
+    Ok(cfg)
+}
+
 /// A local shell, for trying the terminal without a server.
 #[tauri::command]
 fn open_local_shell(
@@ -762,6 +852,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             load_workspace,
             open_terminal,
+            forget_host_key,
             open_local_shell,
             write_terminal,
             resize_terminal,

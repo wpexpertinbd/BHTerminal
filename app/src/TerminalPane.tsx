@@ -5,6 +5,7 @@ import { api, Channel, decodeChunk, type PtyEvent } from "./api";
 import { TERMINAL_THEMES, type TerminalFont } from "./theme";
 import { ContextMenu, type MenuAction } from "./ContextMenu";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { findHostKeyChange, type HostKeyChange } from "./hostKey";
 import "@xterm/xterm/css/xterm.css";
 
 interface Props {
@@ -28,7 +29,8 @@ interface Props {
    *  directly: with broadcast on, what is typed here belongs to every pane in
    *  the tab, and only the tab knows that. */
   onInput: (paneKey: string, data: string) => void;
-  onExit: (paneKey: string, code: number | null) => void;
+  /** `hostKey` is set when ssh refused because the server's key changed. */
+  onExit: (paneKey: string, code: number | null, hostKey: HostKeyChange | null) => void;
   onTitle: (paneKey: string, title: string) => void;
 }
 
@@ -83,10 +85,19 @@ export function TerminalPane({
     // injected into the user's session.
     term.onTitleChange((t) => onTitle(paneKey, t));
 
+    // The start of a session, kept as text: ssh's host-key refusal comes
+    // before any login, so the first few KB are all that need reading.
+    const decoder = new TextDecoder();
+    let opening = "";
     const channel = new Channel<PtyEvent>();
     channel.onmessage = (msg) => {
-      if (msg.type === "output") term.write(decodeChunk(msg.data));
-      else onExit(paneKey, msg.code);
+      if (msg.type === "output") {
+        const bytes = decodeChunk(msg.data);
+        if (opening.length < 16384) opening += decoder.decode(bytes, { stream: true });
+        term.write(bytes);
+      } else {
+        onExit(paneKey, msg.code, hostId ? findHostKeyChange(opening, msg.code) : null);
+      }
     };
 
     const cols = term.cols || 80;

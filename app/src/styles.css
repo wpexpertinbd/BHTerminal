@@ -213,6 +213,19 @@ body {
   color: var(--warn-text); font-size: 12px;
 }
 
+/* BHTERM-HOSTKEY-BANNER */
+.hostkey-banner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; }
+.hostkey-text { flex: 1 1 260px; min-width: 0; line-height: 1.45; }
+.hostkey-fp { margin-top: 4px; overflow-wrap: anywhere; }
+.hostkey-fp code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; }
+.hostkey-error { margin-top: 4px; font-weight: 600; }
+.hostkey-banner .primary {
+  flex: 0 1 auto; max-width: 100%; min-height: 32px; padding: 4px 14px; border-radius: 6px; cursor: pointer;
+  background: var(--accent); border: 1px solid var(--accent); color: #fff; font-size: 12px;
+}
+.hostkey-banner .primary:disabled { opacity: 0.6; cursor: default; }
+/* END BHTERM-HOSTKEY-BANNER */
+
 /* ── SFTP file pane ─────────────────────────────────────────────────────── */
 .files {
   position: absolute; top: 0; right: 0; bottom: 0; width: var(--files-w, 320px);

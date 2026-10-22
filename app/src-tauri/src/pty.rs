@@ -70,9 +70,14 @@ struct LogFile {
 struct Session {
     master: Box<dyn MasterPty + Send>,
     writer: SharedWriter,
-    child: Box<dyn portable_pty::Child + Send + Sync>,
+    child: SharedChild,
     log: LogSink,
 }
+
+/// The child process, shared with the reader thread so the pane can be told
+/// HOW the session ended. ssh exits 255 when it refused to connect (a changed
+/// host key, among others); without the real code every ending looked alike.
+type SharedChild = Arc<Mutex<Box<dyn portable_pty::Child + Send + Sync>>>;
 
 #[derive(Default)]
 pub struct PtyRegistry {
@@ -111,10 +116,12 @@ impl PtyRegistry {
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
 
-        let child = pair
-            .slave
-            .spawn_command(cmd)
-            .map_err(|e| format!("couldn't start {program}: {e}"))?;
+        let child: SharedChild = Arc::new(Mutex::new(
+            pair.slave
+                .spawn_command(cmd)
+                .map_err(|e| format!("couldn't start {program}: {e}"))?,
+        ));
+        let child_for_reader = Arc::clone(&child);
         // The slave must be dropped in the parent, or the reader never sees
         // EOF when the child exits and the pane hangs open forever.
         drop(pair.slave);
@@ -158,7 +165,7 @@ impl PtyRegistry {
                             let _ = sink.file.write_all(&buf[..n]);
                         }
                         if !on_event(PtyEvent::Output { data: B64.encode(&buf[..n]) }) {
-                            break; // the receiver went away
+                            return; // the receiver went away: nobody to tell
                         }
                         // After the server's own output, so a line reads in the
                         // order things happened. Display only: never logged,
@@ -172,7 +179,23 @@ impl PtyRegistry {
                     Err(_) => break,
                 }
             }
-            on_event(PtyEvent::Exit { code: None });
+            // EOF means the program has gone or is going: give it a moment to
+            // be reaped so the pane learns its real exit status. Polled, and
+            // the lock released between polls — a blocking wait() here would
+            // hold the child against close() for as long as it ran.
+            let mut code = None;
+            for _ in 0..30 {
+                let status = child_for_reader.lock().unwrap().try_wait();
+                match status {
+                    Ok(Some(status)) => {
+                        code = Some(status.exit_code() as i32);
+                        break;
+                    }
+                    Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+                    Err(_) => break,
+                }
+            }
+            on_event(PtyEvent::Exit { code });
         });
 
         Ok(())
@@ -198,9 +221,10 @@ impl PtyRegistry {
     /// Explicit close is the ONLY thing that ends a session — see the note at
     /// the top of this file.
     pub fn close(&self, id: &str) {
-        if let Some(mut session) = self.sessions.lock().unwrap().remove(id) {
-            let _ = session.child.kill();
-            let _ = session.child.wait();
+        if let Some(session) = self.sessions.lock().unwrap().remove(id) {
+            let mut child = session.child.lock().unwrap();
+            let _ = child.kill();
+            let _ = child.wait();
         }
     }
 
@@ -595,6 +619,30 @@ mod tests {
         assert!(seen.contains("hello-from-pty"), "got: {seen:?}");
         assert!(exited, "the reader must report EOF when the child exits");
         registry.close("t1");
+    }
+
+    /// ssh's 255 ("refused to connect", e.g. a changed host key) must reach
+    /// the pane — it used to be reported as `None` for every ending.
+    #[test]
+    fn the_real_exit_code_is_reported() {
+        for (id, script, want) in [("e255", "exit 255", Some(255)), ("e0", "exit 0", Some(0))] {
+            let registry = PtyRegistry::default();
+            let (tx, rx) = mpsc::channel::<PtyEvent>();
+            registry
+                .spawn(id.into(), "/bin/sh", &["-c".to_string(), script.to_string()], 80, 24,
+                    AuthSecrets::default(), move |e| tx.send(e).is_ok())
+                .expect("spawn");
+            let mut code = None;
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            while std::time::Instant::now() < deadline {
+                if let Ok(PtyEvent::Exit { code: c }) = rx.recv_timeout(Duration::from_millis(500)) {
+                    code = Some(c);
+                    break;
+                }
+            }
+            assert_eq!(code, Some(want), "{script}");
+            registry.close(id);
+        }
     }
 
     #[test]

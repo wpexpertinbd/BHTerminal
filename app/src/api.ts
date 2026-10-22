@@ -163,6 +163,11 @@ export const api = {
   openTerminal: (hostId: string, cols: number, rows: number, onEvent: Channel<PtyEvent>) =>
     invoke<string>("open_terminal", { hostId, cols, rows, onEvent }),
 
+  /** Forgets the saved key of the server ssh reported as changed (this host
+   *  or its jump host only). Resolves to the known_hosts name removed. */
+  forgetHostKey: (hostId: string, reported: string) =>
+    invoke<string>("forget_host_key", { hostId, reported }),
+
   openLocalShell: (cols: number, rows: number, onEvent: Channel<PtyEvent>) =>
     invoke<string>("open_local_shell", { cols, rows, onEvent }),
 
