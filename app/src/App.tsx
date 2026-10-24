@@ -9,7 +9,7 @@ import { useResizablePanes } from "./useResizablePanes";
 import { loadFont, loadTheme, resolvedMode, saveFont, watchSystemMode, type TerminalFont, type ThemeChoice } from "./theme";
 import { AppearanceSheet } from "./AppearanceSheet";
 import { addressOf, searchHosts, type Hits, type HostMatch } from "./hostSearch";
-import type { HostKeyChange } from "./hostKey";
+import { isProgramPathTitle, type HostKeyChange, type KeyPermissionProblem } from "./hostKey";
 
 /** ⌘F on the Mac. Elsewhere Ctrl+Shift+F, because a bare Ctrl+F belongs to
  *  the terminal (readline's "forward one character", and vim's page-down). */
@@ -48,6 +48,8 @@ interface Pane {
   /** ssh refused because the server's key no longer matches the saved one
    *  (typically: the server was reinstalled). The banner offers to trust it. */
   hostKey?: HostKeyChange | null;
+  /** ssh ignored the host's key file because other accounts can read it. */
+  keyPerms?: KeyPermissionProblem | null;
 }
 
 /** A tab holds one or more panes. Splitting a tab adds a pane to it rather
@@ -361,6 +363,12 @@ export default function App() {
     return h ? authKind(h.authMethod) : undefined;
   }
 
+  /** The key file saved on a host, if it logs in with one. */
+  function authKeyPath(hostId: string | null): string | null {
+    const m = workspace?.store.hosts.find((x) => x.id === hostId)?.authMethod;
+    return m && "privateKey" in m ? m.privateKey.path : null;
+  }
+
   function toggleBroadcast() {
     if (!activeTabKey) return;
     setTabs((prev) =>
@@ -540,6 +548,23 @@ export default function App() {
       restartPane(pane.key);
     } catch (e) {
       set({ busy: false, error: String(e) });
+    }
+  }
+
+  /** "Fix key permissions": make the host's own key file private, reconnect. */
+  async function fixKeyPermissions(pane: Pane) {
+    if (!pane.hostId || !pane.keyPerms || trustState[pane.key]?.busy) return;
+    setTrustState((m) => ({ ...m, [pane.key]: { busy: true, error: null } }));
+    try {
+      await api.fixKeyPermissions(pane.hostId);
+      setTrustState((m) => {
+        const next = { ...m };
+        delete next[pane.key];
+        return next;
+      });
+      restartPane(pane.key);
+    } catch (e) {
+      setTrustState((m) => ({ ...m, [pane.key]: { busy: false, error: String(e) } }));
     }
   }
 
@@ -1055,16 +1080,21 @@ export default function App() {
                       focused={t.key === activeTabKey && p.key === t.focused}
                       onReady={(id) => paneIds.set(p.key, id)}
                       onInput={sendInput}
-                      onExit={(key, code, hostKey) =>
+                      onExit={(key, code, hostKey, keyPerms) =>
                         patchPane(key, (q) => ({
                           ...q,
                           exited: true,
                           hostKey,
+                          keyPerms,
                           title: `${q.title} — exited${code !== null ? ` (${code})` : ""}`,
                         }))
                       }
                       onTitle={(key, title) => {
-                        patchPane(key, (q) => (q.exited ? q : { ...q, title }));
+                        // Windows' ssh titles the console with its own path
+                        // (C:\WINDOWS\…\ssh.exe): keep the host's name instead.
+                        if (!isProgramPathTitle(title)) {
+                          patchPane(key, (q) => (q.exited ? q : { ...q, title }));
+                        }
                         // Distro shells publish the working directory in the
                         // title on every prompt, which is why cwd-follow needs
                         // nothing injected into the user's session.
@@ -1142,7 +1172,29 @@ export default function App() {
           </div>
         )}
 
-        {active?.exited && !active.hostKey && (
+        {active?.exited && !active.hostKey && active.keyPerms && (
+          <div className="banner hostkey-banner">
+            <div className="hostkey-text">
+              <strong>ssh ignored your key file because other accounts on this computer can read it.</strong>{" "}
+              BHTerminal can make it readable by you only and reconnect.
+              <div className="hostkey-fp">
+                Key: <code>{authKeyPath(active.hostId) ?? active.keyPerms.path}</code>
+              </div>
+              {trustState[active.key]?.error && (
+                <div className="hostkey-error">{trustState[active.key].error}</div>
+              )}
+            </div>
+            <button
+              className="primary"
+              disabled={!!trustState[active.key]?.busy}
+              onClick={() => fixKeyPermissions(active)}
+            >
+              Fix key permissions &amp; reconnect
+            </button>
+          </div>
+        )}
+
+        {active?.exited && !active.hostKey && !active.keyPerms && (
           <div className="banner">
             Disconnected. Close the tab, or double-click the host to reconnect.
           </div>

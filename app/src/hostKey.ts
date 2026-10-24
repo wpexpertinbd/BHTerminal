@@ -39,3 +39,35 @@ export function findHostKeyChange(output: string, exitCode: number | null): Host
   const fp = /(SHA256:[A-Za-z0-9+/=]+)/.exec(text);
   return { reported: host[1], fingerprint: fp ? fp[1] : null };
 }
+
+/** ssh ignored the saved key because other accounts can read the file. */
+export interface KeyPermissionProblem {
+  /** The key file as ssh named it, for the message only — the fix itself
+   *  always uses the key path saved on the host. */
+  path: string;
+}
+
+/**
+ * "UNPROTECTED PRIVATE KEY FILE!" in a session that then failed. The fix it
+ * leads to only ever tightens the permissions of the host's own key file, so
+ * matching is deliberately simple.
+ */
+export function findKeyPermissionProblem(output: string, exitCode: number | null): KeyPermissionProblem | null {
+  if (exitCode === 0) return null;
+  const text = plain(output);
+  if (!/UNPROTECTED PRIVATE KEY FILE/.test(text)) return null;
+  const load = /Load key "([^"]+)": bad permissions/.exec(text);
+  return load ? { path: load[1].replace(/\\\\/g, "\\") } : null;
+}
+
+/**
+ * A window title that is just the path of a program, like Windows' ssh
+ * setting `C:\WINDOWS\System32\OpenSSH\ssh.exe`. Such a title says nothing
+ * about the session, so the tab keeps the host's name instead.
+ */
+export function isProgramPathTitle(title: string): boolean {
+  const t = title.trim();
+  // Only the console programs that title a window with their own path —
+  // a working directory that happens to end in ".exe" keeps its title.
+  return /^[A-Za-z]:[\\/](?:.*[\\/])?(ssh|cmd|powershell|pwsh|conhost|wsl|bash)\.exe$/i.test(t);
+}

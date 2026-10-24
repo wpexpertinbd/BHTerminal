@@ -1,7 +1,7 @@
 // Run with: node --test app/src/hostKey.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { findHostKeyChange } from "./hostKey.ts";
+import { findHostKeyChange, findKeyPermissionProblem, isProgramPathTitle } from "./hostKey.ts";
 
 // What OpenSSH prints when a saved server was reinstalled (address made up).
 const WARNING = [
@@ -65,4 +65,32 @@ test("the real warning captured from OpenSSH is recognised", () => {
     reported: "[127.0.0.1]:42722",
     fingerprint: "SHA256:Em06bjQBmJ7VxyK0PBYf3FdegP9RkhJpi35vogx8Svg",
   });
+});
+
+test("a key file other accounts can read is recognised, Windows or Mac", () => {
+  // As Windows OpenSSH printed it for a user (2026-10-24).
+  const win =
+    "Bad permissions. Try removing permissions for user: NT AUTHORITY\\\\Authenticated Users (S-1-5-11) on file F:/Office-PC.\r\n" +
+    "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\r\n" +
+    "@         WARNING: UNPROTECTED PRIVATE KEY FILE!          @\r\n" +
+    "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\r\n" +
+    "Permissions for 'F:/Office-PC' are too open.\r\n" +
+    "This private key will be ignored.\r\n" +
+    'Load key "C:\\\\Users\\\\Jhinuk/Downloads/Office-PC": bad permissions\r\n' +
+    "root@203.0.113.7: Permission denied (publickey,gssapi-keyex,gssapi-with-mic).\r\n";
+  assert.deepEqual(findKeyPermissionProblem(win, 255), { path: "C:\\Users\\Jhinuk/Downloads/Office-PC" });
+  const mac = 'WARNING: UNPROTECTED PRIVATE KEY FILE!\nLoad key "/Users/x/.ssh/id_ed25519": bad permissions\n';
+  assert.equal(findKeyPermissionProblem(mac, 255)?.path, "/Users/x/.ssh/id_ed25519");
+  assert.equal(findKeyPermissionProblem(mac, 0), null, "a session that logged in anyway");
+  assert.equal(findKeyPermissionProblem("Permission denied (publickey).", 255), null);
+});
+
+test("a program path is not a useful tab title; a shell's title is", () => {
+  assert.ok(isProgramPathTitle("C:\\WINDOWS\\System32\\OpenSSH\\ssh.EXE"));
+  assert.ok(isProgramPathTitle("C:/Windows/System32/cmd.exe"));
+  assert.ok(!isProgramPathTitle("/usr/bin/tools"), "a real directory keeps its title");
+  assert.ok(!isProgramPathTitle("D:\\builds\\setup.exe"), "only console programs are dropped");
+  assert.ok(!isProgramPathTitle("root@web: ~"));
+  assert.ok(!isProgramPathTitle("root@web: /var/www"));
+  assert.ok(!isProgramPathTitle("Contabo"));
 });

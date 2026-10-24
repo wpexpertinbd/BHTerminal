@@ -164,6 +164,121 @@ async fn forget_host_key(host_id: String, reported: String) -> Result<String, St
     .map_err(|e| e.to_string())?
 }
 
+/// After "UNPROTECTED PRIVATE KEY FILE": makes the host's saved key file
+/// readable by the user alone, so ssh stops ignoring it.
+///
+/// Only the key file saved on THIS host is touched — never a path taken from
+/// terminal output — and the change only ever tightens access. A symlink or a
+/// missing file is refused, a file swapped for a link mid-way is never
+/// followed, and the result is read back before success is reported.
+#[tauri::command]
+async fn fix_key_permissions(host_id: String) -> Result<String, String> {
+    let host_id: Uuid = host_id.parse().map_err(|_| "bad host id".to_string())?;
+    let store = SessionStore::load(&paths::sessions_file().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    let host = store.host(host_id).ok_or("no such host")?.clone();
+    let bhterm_core::AuthMethod::PrivateKey { path } = &host.auth_method else {
+        return Err("This host doesn't log in with a key file.".into());
+    };
+    let path = ssh::expand_tilde(path);
+    tauri::async_runtime::spawn_blocking(move || {
+        let meta = std::fs::symlink_metadata(&path)
+            .map_err(|e| format!("Couldn't find the key file {path}: {e}"))?;
+        if !meta.file_type().is_file() {
+            return Err(format!("{path} is not a plain file, so it was left alone."));
+        }
+        make_private(&path, &meta)?;
+        Ok(path)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Unix: change the mode through an open handle, after checking the handle is
+/// the very file that was just checked as a plain file (same device + inode).
+/// A link swapped in between would open something else and be refused.
+#[cfg(unix)]
+fn make_private(path: &str, checked: &std::fs::Metadata) -> Result<(), String> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let file = std::fs::File::open(path).map_err(|e| format!("Couldn't open {path}: {e}"))?;
+    let opened = file.metadata().map_err(|e| e.to_string())?;
+    if opened.dev() != checked.dev() || opened.ino() != checked.ino() {
+        return Err(format!("{path} changed while it was being fixed, so it was left alone."));
+    }
+    file.set_permissions(std::fs::Permissions::from_mode(0o600))
+        .map_err(|e| format!("Couldn't change the permissions of {path}: {e}"))?;
+    let mode = file.metadata().map_err(|e| e.to_string())?.permissions().mode();
+    if !bhterm_core::keyperms::unix_mode_is_private(mode) {
+        return Err(format!("{path} is still readable by others (mode {:o}).", mode & 0o777));
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn make_private(path: &str, _checked: &std::fs::Metadata) -> Result<(), String> {
+    make_private_windows(path)
+}
+
+// Compiled on every platform (and used only on Windows) so a Mac build still
+// type-checks it.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn run_tool(program: &str, args: Vec<String>) -> Result<std::process::Output, String> {
+    proc::command(program)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Couldn't run {program}: {e}"))
+}
+
+/// One icacls step that must work; its own message is passed on if it fails.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn icacls_step(args: Vec<String>, what: &str) -> Result<std::process::Output, String> {
+    let out = run_tool("icacls", args)?;
+    if !out.status.success() {
+        let said = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        return Err(format!("Windows refused to {what}: {} {}", said, err).trim().to_string());
+    }
+    Ok(out)
+}
+
+/// The entries on the file — a failed read is an error, never an empty list.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn acl_principals(path: &str) -> Result<Vec<String>, String> {
+    use bhterm_core::keyperms::*;
+    let out = icacls_step(build_icacls_list(path), &format!("read the permissions of {path}"))?;
+    Ok(parse_icacls(&String::from_utf8_lossy(&out.stdout), path))
+}
+
+/// Windows: ssh reads the ACL and the owner. Drop inherited entries, give the
+/// user (by SID) full control, make them the owner, remove every entry left
+/// that isn't the user, and read the ACL back to prove it.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn make_private_windows(path: &str) -> Result<(), String> {
+    use bhterm_core::keyperms::*;
+    let move_hint = "Move the key into your .ssh folder and pick it again in the host's settings.";
+    let who = run_tool("whoami", vec!["/user".into(), "/fo".into(), "csv".into(), "/nh".into()])?;
+    let (me, sid) = parse_whoami_user(&String::from_utf8_lossy(&who.stdout))
+        .ok_or("Couldn't tell which Windows account is running BHTerminal.")?;
+    if !name_is_trustworthy(&me) {
+        return Err(format!("Couldn't read your account name reliably, so nothing was changed. {move_hint}"));
+    }
+
+    icacls_step(build_icacls_restrict(path, &sid), &format!("change the permissions of {path}"))?;
+    // ssh also rejects a key owned by another ordinary account. With full
+    // control just granted, taking ownership needs no special privilege.
+    icacls_step(build_icacls_owner(path, &sid), &format!("make you the owner of {path}"))
+        .map_err(|e| format!("{e}. {move_hint}"))?;
+
+    let found = acl_principals(path)?;
+    if let Some(bad) = found.iter().find(|p| !name_is_trustworthy(p)) {
+        return Err(format!("Couldn't read an account name on {path} reliably ({bad}). {move_hint}"));
+    }
+    for other in principals_to_remove(&found, &me) {
+        icacls_step(build_icacls_remove(path, &other), &format!("remove {other} from {path}"))?;
+    }
+    acl_is_private(&acl_principals(path)?, &me).map_err(|why| format!("{path}: {why}. {move_hint}"))
+}
+
 /// ssh's own answer to "which name and files hold this server's key". If
 /// `ssh -G` can't run, fall back to ssh's defaults.
 fn effective_host_key_config(host: &bhterm_core::Host) -> Result<ssh::HostKeyConfig, String> {
@@ -853,6 +968,7 @@ pub fn run() {
             load_workspace,
             open_terminal,
             forget_host_key,
+            fix_key_permissions,
             open_local_shell,
             write_terminal,
             resize_terminal,
@@ -1057,5 +1173,47 @@ mod connect_tests {
         ] {
             assert!(!is_unreachable(pending), "should keep waiting: {pending}");
         }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod key_permission_tests {
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn a_world_readable_key_is_made_private() {
+        let dir = std::env::temp_dir().join(format!("bhterm-keyperm-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let key = dir.join("id_test");
+        std::fs::write(&key, b"not a real key").unwrap();
+        std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        let meta = std::fs::symlink_metadata(&key).unwrap();
+        super::make_private(key.to_str().unwrap(), &meta).unwrap();
+        let mode = std::fs::metadata(&key).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The file checked as plain must be the one changed: anything swapped in
+    /// at that path after the check (a link to another file) is refused.
+    #[test]
+    fn a_file_swapped_after_the_check_is_left_alone() {
+        let dir = std::env::temp_dir().join(format!("bhterm-keyswap-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let key = dir.join("id_test");
+        let other = dir.join("someone_elses_file");
+        std::fs::write(&key, b"key").unwrap();
+        std::fs::write(&other, b"other").unwrap();
+        std::fs::set_permissions(&other, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let checked = std::fs::symlink_metadata(&key).unwrap();
+        // The swap: the key's name now points at the other file.
+        std::fs::remove_file(&key).unwrap();
+        std::os::unix::fs::symlink(&other, &key).unwrap();
+
+        assert!(super::make_private(key.to_str().unwrap(), &checked).is_err());
+        let mode = std::fs::metadata(&other).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o644, "the other file must be untouched");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -5,7 +5,7 @@ import { api, Channel, decodeChunk, type PtyEvent } from "./api";
 import { TERMINAL_THEMES, type TerminalFont } from "./theme";
 import { ContextMenu, type MenuAction } from "./ContextMenu";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { findHostKeyChange, type HostKeyChange } from "./hostKey";
+import { findHostKeyChange, findKeyPermissionProblem, type HostKeyChange, type KeyPermissionProblem } from "./hostKey";
 import "@xterm/xterm/css/xterm.css";
 
 interface Props {
@@ -29,8 +29,14 @@ interface Props {
    *  directly: with broadcast on, what is typed here belongs to every pane in
    *  the tab, and only the tab knows that. */
   onInput: (paneKey: string, data: string) => void;
-  /** `hostKey` is set when ssh refused because the server's key changed. */
-  onExit: (paneKey: string, code: number | null, hostKey: HostKeyChange | null) => void;
+  /** `hostKey`: ssh refused because the server's key changed. `keyPerms`:
+   *  ssh ignored the saved key file because others can read it. */
+  onExit: (
+    paneKey: string,
+    code: number | null,
+    hostKey: HostKeyChange | null,
+    keyPerms: KeyPermissionProblem | null
+  ) => void;
   onTitle: (paneKey: string, title: string) => void;
 }
 
@@ -96,7 +102,12 @@ export function TerminalPane({
         if (opening.length < 16384) opening += decoder.decode(bytes, { stream: true });
         term.write(bytes);
       } else {
-        onExit(paneKey, msg.code, hostId ? findHostKeyChange(opening, msg.code) : null);
+        onExit(
+          paneKey,
+          msg.code,
+          hostId ? findHostKeyChange(opening, msg.code) : null,
+          hostId ? findKeyPermissionProblem(opening, msg.code) : null
+        );
       }
     };
 

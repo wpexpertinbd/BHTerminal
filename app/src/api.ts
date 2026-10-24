@@ -168,6 +168,10 @@ export const api = {
   forgetHostKey: (hostId: string, reported: string) =>
     invoke<string>("forget_host_key", { hostId, reported }),
 
+  /** Makes the host's own saved key file readable by the user only. Resolves
+   *  to the path that was fixed. */
+  fixKeyPermissions: (hostId: string) => invoke<string>("fix_key_permissions", { hostId }),
+
   openLocalShell: (cols: number, rows: number, onEvent: Channel<PtyEvent>) =>
     invoke<string>("open_local_shell", { cols, rows, onEvent }),
 
